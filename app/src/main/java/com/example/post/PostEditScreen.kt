@@ -75,7 +75,6 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
     
     val prefs = com.example.LocalAppPreferences.current
     var autoSaveStatus by remember { mutableStateOf("") }
-    var imageToDelete by remember { mutableStateOf<String?>(null) }
 
     val imageUploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty()) {
@@ -89,8 +88,9 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                         if (res.isSuccess) {
                             val baseUrl = Api.BASE_URL.removeSuffix("/")
                             val url = "$baseUrl/img/${filename}"
-                            val currentMd = richTextState.toMarkdown()
-                            richTextState.setMarkdown("$currentMd\n[IMG:$url]\n")
+                            val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
+                            val updatedMd = "$currentMd\n![]($url)\n"
+                            richTextState.setMarkdown(ImageUtil.mdToEditor(updatedMd))
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -173,9 +173,10 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
             token = token,
             onInsert = { imgs ->
                 val baseUrl = Api.BASE_URL.removeSuffix("/")
-                val appended = imgs.joinToString("\n") { "[IMG:$baseUrl/img/${it.path}]" }
-                val currentMd = richTextState.toMarkdown()
-                richTextState.setMarkdown("$currentMd\n$appended\n")
+                val appended = imgs.joinToString("\n") { "![]($baseUrl/img/${it.path})" }
+                val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
+                val updatedMd = "$currentMd\n$appended\n"
+                richTextState.setMarkdown(ImageUtil.mdToEditor(updatedMd))
                 showGalleryModal = false
             },
             onDismiss = { showGalleryModal = false }
@@ -354,94 +355,6 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 )
 
                 Divider()
-
-                val currentMarkdown = richTextState.toMarkdown()
-                val imageUrls = remember(currentMarkdown) {
-                    val regex = Regex("""\[IMG:([^\]]+)\]""")
-                    regex.findAll(currentMarkdown).map { it.groupValues[1] }.distinct().toList()
-                }
-
-                if (imageToDelete != null) {
-                    AlertDialog(
-                        onDismissRequest = { imageToDelete = null },
-                        title = { Text("确认删除图片？") },
-                        text = { Text("是否从文章中删除这张图片？这将同时移除正文中对应的 [IMG] 标记。") },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    val url = imageToDelete!!
-                                    val newMd = richTextState.toMarkdown().replace("[IMG:$url]", "")
-                                    richTextState.setMarkdown(newMd)
-                                    imageToDelete = null
-                                }
-                            ) {
-                                Text("删除", color = MaterialTheme.colorScheme.error)
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { imageToDelete = null }) {
-                                Text("取消")
-                            }
-                        }
-                    )
-                }
-
-                if (imageUrls.isNotEmpty()) {
-                    Text(
-                        "本文包含的图片 (长按图片进行删除)",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp)
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        imageUrls.forEach { url ->
-                            Card(
-                                modifier = Modifier
-                                    .width(100.dp)
-                                    .fillMaxHeight()
-                                    .combinedClickable(
-                                        onClick = { },
-                                        onLongClick = { imageToDelete = url }
-                                    ),
-                                shape = RoundedCornerShape(8.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                            ) {
-                                Box(modifier = Modifier.fillMaxSize()) {
-                                    coil.compose.AsyncImage(
-                                        model = url,
-                                        contentDescription = "文章图片",
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .align(Alignment.BottomCenter)
-                                            .background(Color.Black.copy(alpha = 0.6f))
-                                            .padding(2.dp)
-                                    ) {
-                                        Text(
-                                            "[IMG]",
-                                            color = Color.White,
-                                            fontSize = 10.sp,
-                                            modifier = Modifier.align(Alignment.Center)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Divider()
-                }
 
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(

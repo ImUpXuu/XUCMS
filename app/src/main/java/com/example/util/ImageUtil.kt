@@ -55,16 +55,31 @@ object ImageUtil {
     fun mdToEditor(md: String): String {
         val regex = Regex("""!\[([^\]]*)\]\(([^)]+)\)""")
         return regex.replace(md) { matchResult ->
+            val alt = matchResult.groupValues[1]
             val url = matchResult.groupValues[2]
-            "[IMG:$url]"
+            "![$alt] ($url)"
         }
     }
 
     fun editorToMd(editorText: String): String {
-        val regex = Regex("""\[IMG:([^\]]+)\]""")
-        return regex.replace(editorText) { matchResult ->
-            val url = matchResult.groupValues[1]
-            "![]($url)"
+        var cleaned = editorText
+            .replace("\\!\\[", "![")
+            .replace("\\]\\s*\\(", "] (")
+            .replace("\\]\\(", "](")
+            .replace("\\]", "]")
+            .replace("\\(", "(")
+            .replace("\\)", ")")
+            .replace("\\_", "_")
+            .replace("\\*", "*")
+            .replace("\\~", "~")
+            .replace("\\`", "`")
+
+        val regex = Regex("""!\s*\[([^\]]*)\]\s*\(([^)]+)\)""")
+        cleaned = regex.replace(cleaned) { matchResult ->
+            val alt = matchResult.groupValues[1].trim()
+            val url = matchResult.groupValues[2].trim()
+            "![$alt]($url)"
         }
+        return cleaned
     }
 }
