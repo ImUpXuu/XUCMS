@@ -41,6 +41,8 @@ fun PostListScreen(tokenManager: TokenManager, navController: NavController) {
     var isTimelineView by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val token = tokenManager.getToken() ?: ""
+    val prefs = com.example.LocalAppPreferences.current
+    var drafts by remember { mutableStateOf<List<String>>(emptyList()) }
 
     fun loadData() {
         if (!tokenManager.hasToken()) {
@@ -50,6 +52,7 @@ fun PostListScreen(tokenManager: TokenManager, navController: NavController) {
         scope.launch {
             isLoading = true
             error = null
+            drafts = prefs?.getAllDraftKeys() ?: emptyList()
             val res = Api.getPosts(token)
             isLoading = false
             if (res.isSuccess) {
@@ -163,7 +166,13 @@ fun PostListScreen(tokenManager: TokenManager, navController: NavController) {
                             ) {
                                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(post.title ?: post.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(post.title ?: post.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                                            if (drafts.contains("draft_post_${post.name}")) {
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Badge { Text("缓存") }
+                                            }
+                                        }
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(post.date ?: "-", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }

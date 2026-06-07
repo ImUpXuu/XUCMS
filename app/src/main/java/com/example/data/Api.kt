@@ -13,7 +13,7 @@ import java.net.URLEncoder
 object Api {
     private val client = OkHttpClient.Builder().build()
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; explicitNulls = false }
-    private const val BASE_URL = "https://edit.upxuu.com"
+    var BASE_URL = "https://edit.upxuu.com"
     private val mediaType = "application/json".toMediaType()
 
     class ApiException(message: String, val code: Int) : Exception(message)

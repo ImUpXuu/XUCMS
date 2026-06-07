@@ -76,6 +76,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
     var talks by remember { mutableStateOf<List<TalkItem>>(emptyList()) }
     var isTalksLoading by remember { mutableStateOf(false) }
     var isTimelineView by remember { mutableStateOf(false) }
+    var drafts by remember { mutableStateOf<List<String>>(emptyList()) }
 
     val imageUploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty()) {
@@ -149,7 +150,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
     LaunchedEffect(title, date, tags, richTextState.annotatedString, rawText, isRawMode) {
         if (isLoading || isSaving) return@LaunchedEffect
         if (title.isBlank() && rawText.isBlank()) return@LaunchedEffect
-        kotlinx.coroutines.delay(3000)
+        kotlinx.coroutines.delay(30000)
         autoSaveStatus = "保存中..."
         val currentMd = if (isRawMode) rawText else richTextState.toMarkdown()
         val fmStr = FrontmatterParser.buildTalkFrontmatter(
@@ -185,6 +186,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
     if (showListSheet) {
         LaunchedEffect(Unit) {
             isTalksLoading = true
+            drafts = prefs?.getAllDraftKeys() ?: emptyList()
             val res = Api.getTalks(token)
             isTalksLoading = false
             if (res.isSuccess) {
@@ -202,6 +204,19 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                     IconButton(onClick = { isTimelineView = !isTimelineView }) {
                         Icon(if (isTimelineView) Icons.Default.ViewDay else Icons.Default.List, contentDescription = "切换视图")
                     }
+                }
+                
+                if (drafts.contains("draft_talk_new")) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clickable { showListSheet = false; navController.navigate(Screen.TalkEdit.createRoute(null, null)) },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    ) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("继续编辑新的说说", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Badge { Text("未发布") }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
                 if (isTalksLoading) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -239,6 +254,9 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                                         ) {
                                             Text(talk.title ?: talk.name, modifier = Modifier.padding(12.dp), fontWeight = FontWeight.SemiBold)
+                                            if (drafts.contains("draft_talk_${talk.name}")) {
+                                                Badge(modifier = Modifier.padding(bottom = 12.dp, start = 12.dp)) { Text("缓存") }
+                                            }
                                         }
                                     }
                                 }
@@ -249,7 +267,13 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
-                                        Text(talk.title ?: talk.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(talk.title ?: talk.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                            if (drafts.contains("draft_talk_${talk.name}")) {
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Badge { Text("缓存") }
+                                            }
+                                        }
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(talk.date ?: "-", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
@@ -363,12 +387,22 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (!isRawMode) {
+                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold)) }) { Text("H1") }
+                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold)) }) { Text("H2") }
+                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold)) }) { Text("H3") }
+                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 16.sp)) }) { Text("P") }
+                        TextButton(onClick = {
+                            val md = richTextState.toMarkdown() + "\n---\n"
+                            richTextState.setMarkdown(md) 
+                        }) { Text("---") }
                         IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) }) { Icon(Icons.Default.FormatBold, "Bold") }
                         IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontStyle = FontStyle.Italic)) }) { Icon(Icons.Default.FormatItalic, "Italic") }
                         IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)) }) { Icon(Icons.Default.FormatUnderlined, "Underline") }
                         IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)) }) { Icon(Icons.Default.FormatStrikethrough, "Strike") }
                         IconButton(onClick = { richTextState.toggleUnorderedList() }) { Icon(Icons.Default.FormatListBulleted, "UL") }
                         IconButton(onClick = { richTextState.toggleOrderedList() }) { Icon(Icons.Default.FormatListNumbered, "OL") }
+                    } else {
+                        TextButton(onClick = { rawText += "\n---\n" }) { Text("---") }
                     }
                     Spacer(Modifier.width(8.dp))
                     IconButton(onClick = { imageUploadLauncher.launch("image/*") }) { Icon(Icons.Default.AddPhotoAlternate, "上传图片") }

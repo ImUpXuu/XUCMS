@@ -41,4 +41,16 @@ class AppPreferences(context: Context) {
     fun clearDraft(key: String) {
         prefs.edit().remove("draft_$key").apply()
     }
+
+    fun getAllDraftKeys(): List<String> {
+        return prefs.all.keys.filter { it.startsWith("draft_") }
+    }
+
+    fun getBaseUrl(): String {
+        return prefs.getString("base_url", "https://edit.upxuu.com") ?: "https://edit.upxuu.com"
+    }
+
+    fun setBaseUrl(url: String) {
+        prefs.edit().putString("base_url", url).apply()
+    }
 }

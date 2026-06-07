@@ -19,6 +19,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val tokenManager = TokenManager(this)
         val appPreferences = AppPreferences(this)
+        com.example.data.Api.BASE_URL = appPreferences.getBaseUrl()
         setContent {
             CompositionLocalProvider(LocalAppPreferences provides appPreferences) {
                 MyApplicationTheme {

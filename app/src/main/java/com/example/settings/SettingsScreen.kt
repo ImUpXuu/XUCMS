@@ -29,6 +29,8 @@ import com.example.LocalAppPreferences
 import com.example.data.ThemeMode
 import com.example.data.TokenManager
 import com.example.navigation.Screen
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +40,9 @@ fun SettingsScreen(tokenManager: TokenManager, navController: NavController) {
     
     val prefs = LocalAppPreferences.current
     val currentTheme by prefs?.themeMode?.collectAsState() ?: androidx.compose.runtime.mutableStateOf(ThemeMode.SYSTEM)
+
+    var showThemeDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showAboutDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("设置") }) }
@@ -50,33 +55,20 @@ fun SettingsScreen(tokenManager: TokenManager, navController: NavController) {
         ) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().clickable { showThemeDialog = true }
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Row(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                     Text("外观设置", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    val themes = listOf(
-                        ThemeMode.SYSTEM to "跟随系统",
-                        ThemeMode.LIGHT to "浅色模式",
-                        ThemeMode.DARK to "深色模式"
-                    )
-                    
-                    themes.forEach { (mode, label) ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { prefs?.setThemeMode(mode) }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = currentTheme == mode,
-                                onClick = { prefs?.setThemeMode(mode) }
-                            )
-                            Text(label, modifier = Modifier.padding(start = 8.dp))
-                        }
-                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth().clickable { navController.navigate(Screen.Login.route) }
+            ) {
+                Row(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                    Text("登录设置 (修改 API 或 Token)", style = MaterialTheme.typography.titleMedium)
                 }
             }
             
@@ -84,15 +76,15 @@ fun SettingsScreen(tokenManager: TokenManager, navController: NavController) {
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().clickable { showAboutDialog = true }
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("当前 Token", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(maskedToken, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                    Text("关于", style = MaterialTheme.typography.titleMedium)
                 }
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            
+            Spacer(modifier = Modifier.weight(1f))
+            
             Button(
                 onClick = {
                     tokenManager.clearToken()
@@ -103,8 +95,63 @@ fun SettingsScreen(tokenManager: TokenManager, navController: NavController) {
             ) {
                 Text("退出登录", color = MaterialTheme.colorScheme.onError)
             }
-            Spacer(modifier = Modifier.weight(1f))
-            Text("版本号 1.0", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 16.dp))
         }
+    }
+
+    if (showThemeDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showThemeDialog = false },
+            title = { Text("外观设置") },
+            text = {
+                Column {
+                    val themes = listOf(
+                        ThemeMode.SYSTEM to "跟随系统",
+                        ThemeMode.LIGHT to "浅色模式",
+                        ThemeMode.DARK to "深色模式"
+                    )
+                    themes.forEach { (mode, label) ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { prefs?.setThemeMode(mode) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = currentTheme == mode,
+                                onClick = { prefs?.setThemeMode(mode) }
+                            )
+                            Text(label, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showThemeDialog = false }) {
+                    Text("关闭")
+                }
+            }
+        )
+    }
+
+    if (showAboutDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showAboutDialog = false },
+            title = { Text("关于") },
+            text = {
+                Column {
+                    Text("App 名称: Upxuu Editor", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("版本号: 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("隐私政策: 本应用仅连接到您配置的 API 地址，不会将您的文章与说说上传至第三方服务器。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showAboutDialog = false }) {
+                    Text("关闭")
+                }
+            }
+        )
     }
 }

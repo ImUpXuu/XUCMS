@@ -64,6 +64,8 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
     var showMeta by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     
+    var customFilename by remember { mutableStateOf("") }
+    
     var showGalleryModal by remember { mutableStateOf(false) }
     var uploadProgress by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
@@ -146,7 +148,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
         if (isLoading || isSaving) return@LaunchedEffect
         // ignore initial empty state
         if (title.isBlank() && rawText.isBlank()) return@LaunchedEffect
-        kotlinx.coroutines.delay(3000)
+        kotlinx.coroutines.delay(30000)
         autoSaveStatus = "保存中..."
         val currentMd = if (isRawMode) rawText else richTextState.toMarkdown()
         val fmStr = FrontmatterParser.buildPostFrontmatter(
@@ -167,7 +169,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
         autoSaveStatus = "已自动保存草稿: ${sdf.format(Date())}"
     }
 
-    val previewFilename = if (title.isBlank()) "输入标题后将自动生成文件名" else FrontmatterParser.generateFilename(title, published)
+    val previewFilename = if (customFilename.isNotBlank()) "${customFilename.trim()}.md" else if (title.isBlank()) "输入标题后将自动生成文件名" else FrontmatterParser.generateFilename(title, published)
 
     if (showGalleryModal) {
         GallerySelectionModal(
@@ -286,12 +288,22 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (!isRawMode) {
+                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold)) }) { Text("H1") }
+                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold)) }) { Text("H2") }
+                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold)) }) { Text("H3") }
+                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 16.sp)) }) { Text("P") }
+                        TextButton(onClick = {
+                            val md = richTextState.toMarkdown() + "\n---\n"
+                            richTextState.setMarkdown(md) 
+                        }) { Text("---") }
                         IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) }) { Icon(Icons.Default.FormatBold, "Bold") }
                         IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontStyle = FontStyle.Italic)) }) { Icon(Icons.Default.FormatItalic, "Italic") }
                         IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)) }) { Icon(Icons.Default.FormatUnderlined, "Underline") }
                         IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)) }) { Icon(Icons.Default.FormatStrikethrough, "Strike") }
                         IconButton(onClick = { richTextState.toggleUnorderedList() }) { Icon(Icons.Default.FormatListBulleted, "UL") }
                         IconButton(onClick = { richTextState.toggleOrderedList() }) { Icon(Icons.Default.FormatListNumbered, "OL") }
+                    } else {
+                        TextButton(onClick = { rawText += "\n---\n" }) { Text("---") }
                     }
                     Spacer(Modifier.width(8.dp))
                     IconButton(onClick = { imageUploadLauncher.launch("image/*") }) { Icon(Icons.Default.AddPhotoAlternate, "上传图片") }
@@ -367,6 +379,13 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                                 .verticalScroll(rememberScrollState())
                                 .padding(16.dp)
                         ) {
+                            OutlinedTextField(
+                                value = customFilename,
+                                onValueChange = { customFilename = it },
+                                label = { Text("自定义文件名 (无需输 .md)") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(8.dp))
                             OutlinedTextField(value = published, onValueChange = { published = it }, label = { Text("发布时间") }, modifier = Modifier.fillMaxWidth())
                             Spacer(Modifier.height(8.dp))
                             OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("分类") }, modifier = Modifier.fillMaxWidth())
