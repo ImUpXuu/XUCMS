@@ -140,7 +140,7 @@ fun SettingsScreen(tokenManager: TokenManager, navController: NavController) {
             title = { Text("关于") },
             text = {
                 Column {
-                    Text("App 名称: Upxuu Editor", style = MaterialTheme.typography.titleMedium)
+                    Text("App 名称: XUCMS", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("版本号: 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(16.dp))

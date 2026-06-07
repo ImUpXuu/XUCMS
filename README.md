@@ -1,21 +1,69 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# XUCMS — 高性能博客与说说客户端
 
-# Run and deploy your AI Studio app
+XUCMS 是一款为自建或托管 CMS 设计的精美 Andorid 客户端。在保障全平台自适应排版的前提下，旨在为您提供最纯粹的随时随地创作、编辑文章及说说（动态）的全新体验。
 
-This contains everything you need to run your app locally.
+---
 
-View your app in AI Studio: https://ai.studio/apps/d7f8378d-bc94-4db4-bb32-4920bb768521
+## ✨ 核心特性
 
-## Run Locally
+### 1. 📂 强大的文章编辑与发布管理
+- **自定义文章文件名**：支持直接配置 `.md` 文件的名称，系统将智能剔除冗余后缀并保持文件名统一规范，不再依赖标题拼音/英文自动转换。
+- **全新升级的 Markdown 排版工具栏**：
+  - **H1 - H3 / P 段落一键定制**：支持下拉选择框（Dropdown Menu）选取包含“H1 大标题”、“H2 中标题”、“H3 小标题”和“P 正文”在内的段落样式样式。
+  - **分割线扩展**：新增一键插入标准的 Markdown 分割线 `---` 块，为排版带来极致的段落纵深感。
+  - **快捷样式**：支持粗体（Bold）、斜体（Italic）、下划线（Underline）、无序列表（UL）级有序列表（OL）的无缝切换。
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+### 2. 💾 30s 极速云/本地草稿自动保存与防崩溃恢复
+- **秒级自动保存**：编辑区会自动开启一个 30s 的周期后台保存任务，发生任何突发故障都能确保本地/Room 数据万无一失。
+- **灾后数据恢复**：应用崩溃或后台进程被清理后，再次进入编辑页时，气泡/弹窗会及时检测最近一次的草稿快照，提供“恢复历史草稿”机制。
+- **缓存标签醒目提示**：文章或者说说在未成功投递/发布，抑或是本地有更新快照时，在列表页面会对对应的记录打上醒目的 **[缓存]** 的彩色微章（Badge），随时提示修改现状。
 
+### 3. 🌐 自定义多源登录端点支持
+- **去中心化配置**：登录页不再硬编码限制 `edit.upxuu.com`，您可以在登录页面自定义 Base URL 协议与主机号。
+- **多账号无缝漫游**：可自主适配基于同类 API 设计的所有多级 CMS 服务系统。
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+### 4. 🎨 极简 Material Design 3 视觉盛宴
+- **自适应系统图标**：配备了特别为 XUCMS 优雅提炼的 2D 矢量微章应用图标。暗黑夜空深蓝色主题，带来充满质感的交互视觉。
+- **全新层级化设置中心**：
+  - **外观设置**：点击外观设置弹出优美的对话框，支持“跟随系统”、“浅色模式”、“深色模式”无感平滑切换。
+  - **登录设置**：精细化管理的 API 与 Token 查看及变更入口。
+  - **关于软件**：展示精简的版本号、版权声明以及专业的应用内隔离存储隐私条款。
+
+### 5. 🚀 自动化 GitHub Actions 持续构建发布 (CI/CD)
+- 已经构建了标准的 `/.github/workflows/release.yml` 自动化发布脚本。
+- **一键构建生产包**：当向仓库推送类似 `v1.0.0` 的版本标签时，GitHub 容器会自动拉起 JDK 17 及 Gradle 系统编译 Release APK。
+- **自动挂载 Release**：构建成功后的 APK 包会自动上传到 GitHub Releases 中供直接下载安装。
+
+---
+
+## 🛠️ 项目构建与环境准备
+
+XUCMS 使用 Kotlin 作为开发语言，并由 Jetpack Compose 进行全声明式 UI 重塑，底层辅以 Flow & LiveCycle 架构机制进行开发。
+
+### 系统要求
+- **Android Gradle Plugin (AGP)**：`v8+`
+- **Gradle 运行环境**：`v8.5+` 或 `v9.3`
+- **JDK 运行环境**：`Java 17`
+
+### 常用命令
+```bash
+# 验证代码编译可靠性
+gradle compileDebugJavaWithJavac
+
+# 构建可用于装机调试的 Debug 版本 APK
+gradle assembleDebug
+
+# 构建适用于分发与发布的 Release APK 包
+gradle规律 assembleRelease
+```
+
+---
+
+## ⚙️ 配置文件与存储安全性
+
+- **Token 与配置存储**：使用了 Android 的安全文件隔离域，用户所填写的自定义 API Base URL 以及 Token 会直接加密或隔绝存入 `SharedPreferences`。
+- **自动化流控**：每次启动应用，`MainActivity` 会预先读取首选项并同步更新 `com.example.data.Api.BASE_URL`。
+
+## 🤝 贡献与反馈
+
+欢迎您为 XUCMS 提交 Issue 或 PR。任何对于排版精美度、缓存机制以及自动构建方法的优化建议，都将帮助我们将项目打造成更高效的写作利器！
