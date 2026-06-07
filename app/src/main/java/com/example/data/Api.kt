@@ -78,6 +78,27 @@ object Api {
         }
     }
 
+    private suspend inline fun <reified Req, reified Resp> post(endpoint: String, token: String, body: Req): Result<Resp> = withContext(Dispatchers.IO) {
+        try {
+            val reqStr = json.encodeToString(body)
+            val req = Request.Builder()
+                .url("$BASE_URL$endpoint")
+                .header("Authorization", "Bearer $token")
+                .post(reqStr.toRequestBody(mediaType))
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val bodyStr = resp.body?.string() ?: ""
+                    Result.success(json.decodeFromString(bodyStr))
+                } else {
+                    Result.failure(ApiException("HTTP ${resp.code}", resp.code))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun getPosts(token: String) = get<List<PostItem>>("/api/posts", token)
     suspend fun getPost(token: String, filename: String) = get<PostDetail>("/api/post/${URLEncoder.encode(filename, "UTF-8")}", token)
     suspend fun putPost(token: String, filename: String, body: PostPutBody) = put<PostPutBody, PostPutResponse>("/api/post/${URLEncoder.encode(filename, "UTF-8")}", token, body)
@@ -87,4 +108,8 @@ object Api {
     suspend fun getTalk(token: String, filename: String) = get<TalkDetail>("/api/talk/${URLEncoder.encode(filename, "UTF-8")}", token)
     suspend fun putTalk(token: String, filename: String, body: TalkPutBody) = put<TalkPutBody, PostPutResponse>("/api/talk/${URLEncoder.encode(filename, "UTF-8")}", token, body)
     suspend fun deleteTalk(token: String, filename: String, sha: String) = delete("/api/talk/${URLEncoder.encode(filename, "UTF-8")}", token, sha)
+
+    suspend fun getImages(token: String) = get<List<ImageItem>>("/api/images", token)
+    suspend fun deleteImage(token: String, path: String, sha: String) = delete("/api/img/${URLEncoder.encode(path, "UTF-8")}", token, sha)
+    suspend fun uploadImage(token: String, body: UploadImageBody) = post<UploadImageBody, UploadImageResponse>("/api/upload", token, body)
 }

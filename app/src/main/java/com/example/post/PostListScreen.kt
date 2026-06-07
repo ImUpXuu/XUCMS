@@ -1,15 +1,19 @@
 package com.example.post
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ViewDay
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,8 +37,9 @@ fun PostListScreen(tokenManager: TokenManager, navController: NavController) {
     var searchQuery by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember { mutableStateOf<PostItem?>(null) }
+    var isTimelineView by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val token = tokenManager.getToken() ?: ""
 
     fun loadData() {
@@ -65,7 +70,9 @@ fun PostListScreen(tokenManager: TokenManager, navController: NavController) {
         loadData()
     }
 
-    val filteredPosts = posts.filter { it.title?.contains(searchQuery, ignoreCase = true) ?: it.name.contains(searchQuery, ignoreCase = true) }
+    val filteredPosts = posts
+        .filter { it.title?.contains(searchQuery, ignoreCase = true) ?: it.name.contains(searchQuery, ignoreCase = true) }
+        .sortedByDescending { it.date ?: it.name }
 
     Scaffold(
         topBar = {
@@ -73,12 +80,14 @@ fun PostListScreen(tokenManager: TokenManager, navController: NavController) {
                 TopAppBar(
                     title = { Text("文章管理") },
                     actions = {
+                        IconButton(onClick = { isTimelineView = !isTimelineView }) {
+                            Icon(if (isTimelineView) Icons.Default.ViewDay else Icons.Default.List, contentDescription = "切换视图")
+                        }
                         IconButton(onClick = { loadData() }) {
                             Icon(Icons.Default.Refresh, contentDescription = "刷新")
                         }
-                        IconButton(onClick = { navController.navigate(Screen.PostEdit.createRoute(null, null)) }) {
-                            Icon(Icons.Default.Add, contentDescription = "新建")
-                        }
+                        // Hide internal add button since we have a global app-level FAB
+                        // Actually, just keep it, doesn't hurt.
                     }
                 )
                 OutlinedTextField(
@@ -109,30 +118,61 @@ fun PostListScreen(tokenManager: TokenManager, navController: NavController) {
                 Text("还没有文章", color = Color.Gray, modifier = Modifier.align(Alignment.Center))
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
-                    items(filteredPosts) { post ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp)
-                                .clickable { navController.navigate(Screen.PostEdit.createRoute(post.name, post.sha)) },
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            shape = RoundedCornerShape(16.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                        ) {
-                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(post.title ?: post.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1E293B))
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(post.date ?: "-", fontSize = 13.sp, color = Color(0xFF64748B))
-                                        // add pill
+                    if (isTimelineView) {
+                        items(filteredPosts) { post ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Min)
+                                    .clickable { navController.navigate(Screen.PostEdit.createRoute(post.name, post.sha)) }
+                            ) {
+                                Column(
+                                    modifier = Modifier.width(32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Box(modifier = Modifier.size(12.dp).background(MaterialTheme.colorScheme.primary, CircleShape).padding(vertical = 12.dp))
+                                    Box(modifier = Modifier.width(2.dp).fillMaxHeight().background(Color.LightGray))
+                                }
+                                Column(modifier = Modifier.padding(bottom = 16.dp).weight(1f)) {
+                                    Text(post.date ?: "-", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                    ) {
+                                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text(post.title ?: post.name, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                            IconButton(onClick = { navController.navigate(Screen.PostEdit.createRoute(post.name, post.sha)) }) {
+                                                Icon(Icons.Default.Edit, contentDescription = "编辑", tint = Color.Gray)
+                                            }
+                                        }
                                     }
                                 }
-                                IconButton(onClick = { navController.navigate(Screen.PostEdit.createRoute(post.name, post.sha)) }) {
-                                    Icon(Icons.Default.Edit, contentDescription = "编辑", tint = Color.Gray)
-                                }
-                                IconButton(onClick = { showDeleteConfirm = post }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "删除", tint = Color(0xFFEF4444))
+                            }
+                        }
+                    } else {
+                        items(filteredPosts) { post ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp)
+                                    .clickable { navController.navigate(Screen.PostEdit.createRoute(post.name, post.sha)) },
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                shape = RoundedCornerShape(16.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(post.title ?: post.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(post.date ?: "-", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    IconButton(onClick = { navController.navigate(Screen.PostEdit.createRoute(post.name, post.sha)) }) {
+                                        Icon(Icons.Default.Edit, contentDescription = "编辑", tint = Color.Gray)
+                                    }
+                                    IconButton(onClick = { showDeleteConfirm = post }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
+                                    }
                                 }
                             }
                         }
@@ -145,7 +185,7 @@ fun PostListScreen(tokenManager: TokenManager, navController: NavController) {
             AlertDialog(
                 onDismissRequest = { showDeleteConfirm = null },
                 title = { Text("确认删除") },
-                text = { Text("要删除文章 \${showDeleteConfirm?.title ?: showDeleteConfirm?.name} 吗？") },
+                text = { Text("要删除文章 ${showDeleteConfirm?.title ?: showDeleteConfirm?.name} 吗？") },
                 confirmButton = {
                     TextButton(onClick = {
                         scope.launch {

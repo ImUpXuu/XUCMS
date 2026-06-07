@@ -29,3 +29,12 @@ data class TalkPutBody(val content: String, val sha: String? = null)
 @Serializable
 data class DeleteBody(val sha: String)
 
+@Serializable
+data class ImageItem(val name: String, val path: String, val sha: String)
+
+@Serializable
+data class UploadImageBody(val filename: String, val content: String)
+
+@Serializable
+data class UploadImageResponse(val url: String)
+

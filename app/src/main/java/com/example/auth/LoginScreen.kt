@@ -47,7 +47,7 @@ fun LoginScreen(tokenManager: TokenManager, onLoginSuccess: () -> Unit) {
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(Color(0xFF4F46E5), Color(0xFF3B82F6))
+                    colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary)
                 )
             ),
         contentAlignment = Alignment.Center
@@ -55,7 +55,7 @@ fun LoginScreen(tokenManager: TokenManager, onLoginSuccess: () -> Unit) {
         Card(
             modifier = Modifier.padding(32.dp),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier

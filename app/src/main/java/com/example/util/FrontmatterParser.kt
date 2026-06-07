@@ -68,17 +68,17 @@ object FrontmatterParser {
     fun buildPostFrontmatter(fm: FrontmatterResult): String {
         val build = StringBuilder()
         build.append("---\n")
-        build.append("title: \"\${fm.title}\"\n")
-        build.append("published: \"\${fm.published}\"\n")
-        if (fm.category.isNotEmpty()) build.append("category: \"\${fm.category}\"\n")
+        build.append("title: \"${fm.title}\"\n")
+        build.append("published: \"${fm.published}\"\n")
+        if (fm.category.isNotEmpty()) build.append("category: \"${fm.category}\"\n")
         if (fm.tags.isNotEmpty()) {
-            val tagsStr = fm.tags.joinToString(", ") { "\"\$it\"" }
-            build.append("tags: [\$tagsStr]\n")
+            val tagsStr = fm.tags.joinToString(", ") { "\"$it\"" }
+            build.append("tags: [$tagsStr]\n")
         }
-        if (fm.description.isNotEmpty()) build.append("description: \"\${fm.description}\"\n")
-        if (fm.image.isNotEmpty()) build.append("image: \"\${fm.image}\"\n")
+        if (fm.description.isNotEmpty()) build.append("description: \"${fm.description}\"\n")
+        if (fm.image.isNotEmpty()) build.append("image: \"${fm.image}\"\n")
         if (fm.draft) build.append("draft: true\n")
-        if (fm.sticky > 0) build.append("sticky: \${fm.sticky}\n")
+        if (fm.sticky > 0) build.append("sticky: ${fm.sticky}\n")
         build.append("---\n\n")
         build.append(fm.body)
         return build.toString()
@@ -87,11 +87,11 @@ object FrontmatterParser {
     fun buildTalkFrontmatter(title: String, date: String, tags: List<String>, body: String): String {
         val build = StringBuilder()
         build.append("---\n")
-        build.append("title: \"\$title\"\n")
-        build.append("date: \"\$date\"\n")
+        if (title.isNotEmpty()) build.append("title: \"$title\"\n")
+        build.append("date: \"$date\"\n")
         if (tags.isNotEmpty()) {
-            val tagsStr = tags.joinToString(", ") { "\"\$it\"" }
-            build.append("tags: [\$tagsStr]\n")
+            val tagsStr = tags.joinToString(", ") { "\"$it\"" }
+            build.append("tags: [$tagsStr]\n")
         }
         build.append("---\n\n")
         build.append(body)
@@ -103,6 +103,6 @@ object FrontmatterParser {
         val safeTitle = title.replace(Regex("[/\\\\:*?\"<>|\\s]+"), "-")
             .replace(Regex("-+"), "-")
             .take(30)
-        return "\$datePrefix-\$safeTitle.md"
+        return "$datePrefix-$safeTitle.md"
     }
 }
