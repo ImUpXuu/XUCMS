@@ -92,7 +92,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                             val baseUrl = Api.BASE_URL.removeSuffix("/")
                             val url = "$baseUrl/img/${fname}"
                             val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
-                            val updatedMd = "$currentMd\n![]($url)\n"
+                            val updatedMd = "$currentMd\n[IMG:$url]\n"
                             richTextState.setMarkdown(ImageUtil.mdToEditor(updatedMd))
                         }
                     } catch (e: Exception) {
@@ -168,7 +168,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
             token = token,
             onInsert = { imgs ->
                 val baseUrl = Api.BASE_URL.removeSuffix("/")
-                val appended = imgs.joinToString("\n") { "![]($baseUrl/img/${it.path})" }
+                val appended = imgs.joinToString("\n") { "[IMG:$baseUrl/img/${it.path}]" }
                 val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
                 val updatedMd = "$currentMd\n$appended\n"
                 richTextState.setMarkdown(ImageUtil.mdToEditor(updatedMd))

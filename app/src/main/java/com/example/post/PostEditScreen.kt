@@ -89,8 +89,11 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                             val baseUrl = Api.BASE_URL.removeSuffix("/")
                             val url = "$baseUrl/img/${filename}"
                             val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
-                            val updatedMd = "$currentMd\n![]($url)\n"
+                            val updatedMd = "$currentMd\n[IMG:$url]\n"
                             richTextState.setMarkdown(ImageUtil.mdToEditor(updatedMd))
+                            if (image.isBlank()) {
+                                image = url
+                            }
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -173,10 +176,13 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
             token = token,
             onInsert = { imgs ->
                 val baseUrl = Api.BASE_URL.removeSuffix("/")
-                val appended = imgs.joinToString("\n") { "![]($baseUrl/img/${it.path})" }
+                val appended = imgs.joinToString("\n") { "[IMG:$baseUrl/img/${it.path}]" }
                 val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
                 val updatedMd = "$currentMd\n$appended\n"
                 richTextState.setMarkdown(ImageUtil.mdToEditor(updatedMd))
+                if (image.isBlank() && imgs.isNotEmpty()) {
+                    image = "$baseUrl/img/${imgs.first().path}"
+                }
                 showGalleryModal = false
             },
             onDismiss = { showGalleryModal = false }
