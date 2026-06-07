@@ -26,6 +26,7 @@ import com.example.post.PostEditScreen
 import com.example.post.PostListScreen
 import com.example.settings.SettingsScreen
 import com.example.settings.AboutScreen
+import com.example.splash.SplashScreen
 import com.example.talk.TalkEditScreen
 import com.example.gallery.GalleryScreen
 import java.net.URLDecoder
@@ -43,23 +44,25 @@ sealed class Screen(val route: String) {
     object Gallery : Screen("gallery")
     object Settings : Screen("settings")
     object About : Screen("about")
+    object Splash : Screen("splash")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavigation(tokenManager: TokenManager) {
     val navController = rememberNavController()
-    val startDestination = if (tokenManager.hasToken()) Screen.TalkEdit.createRoute(null, null) else Screen.Login.route
+    val startDestination = Screen.Splash.route
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
     val isLogin = currentRoute == Screen.Login.route
+    val isSplash = currentRoute == Screen.Splash.route
     val isPostEdit = currentRoute?.startsWith("post_edit") == true
     val isTalkEdit = currentRoute?.startsWith("talk_edit") == true
 
-    val showBottomBar = !isLogin
-    val showFab = !isLogin && !isPostEdit && !isTalkEdit
+    val showBottomBar = !isLogin && !isSplash
+    val showFab = !isLogin && !isSplash && !isPostEdit && !isTalkEdit
 
     var showFabMenu by remember { mutableStateOf(false) }
 
@@ -153,6 +156,9 @@ fun AppNavigation(tokenManager: TokenManager) {
         }
 
         NavHost(navController = navController, startDestination = startDestination, modifier = Modifier.padding(padding)) {
+            composable(Screen.Splash.route) {
+                SplashScreen(tokenManager, navController)
+            }
             composable(Screen.Login.route) {
                 LoginScreen(tokenManager) {
                     navController.navigate(Screen.TalkEdit.createRoute(null, null)) {
