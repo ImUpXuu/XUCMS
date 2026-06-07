@@ -88,9 +88,9 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                         if (res.isSuccess) {
                             val baseUrl = Api.BASE_URL.removeSuffix("/")
                             val url = "$baseUrl/img/${filename}"
-                            val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
-                            val updatedMd = "$currentMd\n[IMG:$url]\n"
-                            richTextState.setMarkdown(ImageUtil.mdToEditor(updatedMd))
+                            val currentMd = richTextState.toMarkdown()
+                            val updatedMd = "$currentMd\n![]($url)\n"
+                            richTextState.setMarkdown(updatedMd)
                             if (image.isBlank()) {
                                 image = url
                             }
@@ -120,7 +120,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 image = fm.image
                 draft = fm.draft
                 sticky = fm.sticky.toString()
-                richTextState.setMarkdown(ImageUtil.mdToEditor(fm.body))
+                richTextState.setMarkdown(fm.body)
             } else {
                 error = res.exceptionOrNull()?.message
             }
@@ -139,7 +139,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 image = fm.image
                 draft = fm.draft
                 sticky = fm.sticky.toString()
-                richTextState.setMarkdown(ImageUtil.mdToEditor(fm.body))
+                richTextState.setMarkdown(fm.body)
             }
         }
     }
@@ -150,7 +150,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
         if (title.isBlank() && richTextState.toMarkdown().isBlank()) return@LaunchedEffect
         kotlinx.coroutines.delay(30000)
         autoSaveStatus = "保存中..."
-        val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
+        val currentMd = richTextState.toMarkdown()
         val fmStr = FrontmatterParser.buildPostFrontmatter(
             com.example.util.FrontmatterResult(
                 title = title,
@@ -176,10 +176,10 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
             token = token,
             onInsert = { imgs ->
                 val baseUrl = Api.BASE_URL.removeSuffix("/")
-                val appended = imgs.joinToString("\n") { "[IMG:$baseUrl/img/${it.path}]" }
-                val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
+                val appended = imgs.joinToString("\n") { "![]($baseUrl/img/${it.path})" }
+                val currentMd = richTextState.toMarkdown()
                 val updatedMd = "$currentMd\n$appended\n"
-                richTextState.setMarkdown(ImageUtil.mdToEditor(updatedMd))
+                richTextState.setMarkdown(updatedMd)
                 if (image.isBlank() && imgs.isNotEmpty()) {
                     image = "$baseUrl/img/${imgs.first().path}"
                 }
@@ -217,7 +217,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                                 onClick = {
                                     scope.launch {
                                         isSaving = true
-                                        val bodyMarkdown = ImageUtil.editorToMd(richTextState.toMarkdown())
+                                        val bodyMarkdown = richTextState.toMarkdown()
                                         val fm = FrontmatterParser.buildPostFrontmatter(
                                             com.example.util.FrontmatterResult(
                                                 title = title,

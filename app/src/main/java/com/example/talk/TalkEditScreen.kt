@@ -91,9 +91,9 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                         if (res.isSuccess) {
                             val baseUrl = Api.BASE_URL.removeSuffix("/")
                             val url = "$baseUrl/img/${fname}"
-                            val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
-                            val updatedMd = "$currentMd\n[IMG:$url]\n"
-                            richTextState.setMarkdown(ImageUtil.mdToEditor(updatedMd))
+                            val currentMd = richTextState.toMarkdown()
+                            val updatedMd = "$currentMd\n![]($url)\n"
+                            richTextState.setMarkdown(updatedMd)
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -117,7 +117,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 title = fm.title
                 date = fm.published
                 tags = fm.tags.joinToString(", ")
-                richTextState.setMarkdown(ImageUtil.mdToEditor(fm.body))
+                richTextState.setMarkdown(fm.body)
             } else {
                 error = res.exceptionOrNull()?.message
             }
@@ -139,7 +139,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 title = fm.title
                 date = fm.published
                 tags = fm.tags.joinToString(", ")
-                richTextState.setMarkdown(ImageUtil.mdToEditor(fm.body))
+                richTextState.setMarkdown(fm.body)
             }
         }
     }
@@ -149,7 +149,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
         if (title.isBlank() && richTextState.toMarkdown().isBlank()) return@LaunchedEffect
         kotlinx.coroutines.delay(30000)
         autoSaveStatus = "保存中..."
-        val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
+        val currentMd = richTextState.toMarkdown()
         val fmStr = FrontmatterParser.buildTalkFrontmatter(
             title = title,
             date = date,
@@ -168,10 +168,10 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
             token = token,
             onInsert = { imgs ->
                 val baseUrl = Api.BASE_URL.removeSuffix("/")
-                val appended = imgs.joinToString("\n") { "[IMG:$baseUrl/img/${it.path}]" }
-                val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
+                val appended = imgs.joinToString("\n") { "![]($baseUrl/img/${it.path})" }
+                val currentMd = richTextState.toMarkdown()
                 val updatedMd = "$currentMd\n$appended\n"
-                richTextState.setMarkdown(ImageUtil.mdToEditor(updatedMd))
+                richTextState.setMarkdown(updatedMd)
                 showGalleryModal = false
             },
             onDismiss = { showGalleryModal = false }
@@ -316,7 +316,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                                             title = title,
                                             date = date,
                                             tags = tags.split(",").map { it.trim() }.filter { it.isNotEmpty() },
-                                            body = ImageUtil.editorToMd(richTextState.toMarkdown())
+                                            body = richTextState.toMarkdown()
                                         )
                                         val targetFilename = if (isNew) previewFilename else filename!!
                                         val res = Api.putTalk(token, targetFilename, TalkPutBody(fm, currentSha))
