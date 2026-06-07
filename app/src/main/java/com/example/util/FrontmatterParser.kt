@@ -44,8 +44,8 @@ object FrontmatterParser {
                         "published", "date" -> published = cleanValue
                         "category" -> category = cleanValue
                         "tags" -> {
-                            val tagsStr = value.removeSurrounding("[").removeSurrounding("]")
-                            tags = tagsStr.split(",").map { it.trim().removeSurrounding("\"").removeSurrounding("'") }.filter { it.isNotEmpty() }
+                            val tagsStr = value.trim().removeSurrounding("[", "]")
+                            tags = tagsStr.split(",").map { it.trim().removeSurrounding("\"", "\"").removeSurrounding("'", "'") }.filter { it.isNotEmpty() }
                         }
                         "description" -> description = cleanValue
                         "image" -> image = cleanValue
@@ -74,6 +74,8 @@ object FrontmatterParser {
         if (fm.tags.isNotEmpty()) {
             val tagsStr = fm.tags.joinToString(", ") { "\"$it\"" }
             build.append("tags: [$tagsStr]\n")
+        } else {
+            build.append("tags: []\n")
         }
         if (fm.description.isNotEmpty()) build.append("description: \"${fm.description}\"\n")
         if (fm.image.isNotEmpty()) build.append("image: \"${fm.image}\"\n")
@@ -92,6 +94,8 @@ object FrontmatterParser {
         if (tags.isNotEmpty()) {
             val tagsStr = tags.joinToString(", ") { "\"$it\"" }
             build.append("tags: [$tagsStr]\n")
+        } else {
+            build.append("tags: []\n")
         }
         build.append("---\n\n")
         build.append(body)

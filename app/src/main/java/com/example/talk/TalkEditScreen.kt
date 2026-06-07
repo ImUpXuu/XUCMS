@@ -387,10 +387,43 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (!isRawMode) {
-                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold)) }) { Text("H1") }
-                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold)) }) { Text("H2") }
-                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold)) }) { Text("H3") }
-                        TextButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 16.sp)) }) { Text("P") }
+                        var expanded by remember { mutableStateOf(false) }
+                        Box {
+                            TextButton(onClick = { expanded = true }) { Text("H ▼") }
+                            androidx.compose.material3.DropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false }
+                            ) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("H1 大标题") },
+                                    onClick = { 
+                                        richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold))
+                                        expanded = false 
+                                    }
+                                )
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("H2 中标题") },
+                                    onClick = { 
+                                        richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold))
+                                        expanded = false 
+                                    }
+                                )
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("H3 小标题") },
+                                    onClick = { 
+                                        richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                                        expanded = false 
+                                    }
+                                )
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("P 正文") },
+                                    onClick = { 
+                                        richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 16.sp))
+                                        expanded = false 
+                                    }
+                                )
+                            }
+                        }
                         TextButton(onClick = {
                             val md = richTextState.toMarkdown() + "\n---\n"
                             richTextState.setMarkdown(md) 
