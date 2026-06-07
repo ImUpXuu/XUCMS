@@ -13,23 +13,42 @@ import kotlin.math.min
 import kotlin.random.Random
 
 object ImageUtil {
-    fun compressAndEncode(context: Context, uri: Uri): String {
-        val bitmap = MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
-        val (w, h) = if (bitmap.width > 1920 || bitmap.height > 1920) {
-            val ratio = min(1920f / bitmap.width, 1920f / bitmap.height)
-            Pair((bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt())
-        } else Pair(bitmap.width, bitmap.height)
-        val scaled = Bitmap.createScaledBitmap(bitmap, w, h, true)
-        val bytes = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.WEBP, 80, bytes)
-        return Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP)
+    fun getExtensionFromUri(context: Context, uri: Uri): String {
+        val contentResolver = context.contentResolver
+        val type = contentResolver.getType(uri)
+        if (type != null) {
+            val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(type)
+            if (!extension.isNullOrEmpty()) {
+                return extension
+            }
+        }
+        val path = uri.path
+        if (path != null) {
+            val dot = path.lastIndexOf('.')
+            if (dot != -1) {
+                return path.substring(dot + 1)
+            }
+        }
+        return "jpg"
     }
 
-    fun generateImageFilename(): String {
+    fun compressAndEncode(context: Context, uri: Uri): String {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            val bytes = inputStream?.use { it.readBytes() } ?: ByteArray(0)
+            Base64.encodeToString(bytes, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            ""
+        }
+    }
+
+    fun generateImageFilename(context: Context? = null, uri: Uri? = null): String {
+        val ext = if (context != null && uri != null) getExtensionFromUri(context, uri) else "webp"
         val date = Date()
         val pathSdf = SimpleDateFormat("yyyy/M/d", Locale.getDefault())
         val nameSdf = SimpleDateFormat("yyyyMMddHHmmss", Locale.getDefault())
         val random = String.format("%03d", Random.nextInt(1000))
-        return "${pathSdf.format(date)}/${nameSdf.format(date)}_$random.webp"
+        return "${pathSdf.format(date)}/${nameSdf.format(date)}_$random.$ext"
     }
 }

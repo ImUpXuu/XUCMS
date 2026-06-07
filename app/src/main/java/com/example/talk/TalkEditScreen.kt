@@ -85,7 +85,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                     uploadProgress = "正在上传 (${index + 1}/${uris.size})..."
                     try {
                         val base64 = ImageUtil.compressAndEncode(context, uri)
-                        val fname = ImageUtil.generateImageFilename()
+                        val fname = ImageUtil.generateImageFilename(context, uri)
                         val res = Api.uploadImage(token, UploadImageBody(fname, base64))
                         if (res.isSuccess) {
                             val baseUrl = Api.BASE_URL.removeSuffix("/")
@@ -93,8 +93,10 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                             if (isRawMode) {
                                 rawText += "\n![]($url)\n"
                             } else {
-                                val currentMd = richTextState.toMarkdown()
-                                richTextState.setMarkdown("$currentMd\n![]($url)\n")
+                                rawText = richTextState.toMarkdown()
+                                isRawMode = true
+                                rawText += "\n![]($url)\n"
+                                android.widget.Toast.makeText(context, "已切换至源码模式以防图片格式受损", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         }
                     } catch (e: Exception) {
@@ -176,8 +178,10 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 if (isRawMode) {
                     rawText += "\n$appended\n"
                 } else {
-                    val md = richTextState.toMarkdown() + "\n$appended\n"
-                    richTextState.setMarkdown(md)
+                    rawText = richTextState.toMarkdown()
+                    isRawMode = true
+                    rawText += "\n$appended\n"
+                    android.widget.Toast.makeText(context, "已切换至源码模式以防图片格式受损", android.widget.Toast.LENGTH_SHORT).show()
                 }
                 showGalleryModal = false
             },

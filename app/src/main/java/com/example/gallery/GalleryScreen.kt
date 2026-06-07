@@ -78,7 +78,7 @@ fun GalleryScreen(tokenManager: TokenManager) {
                 for (uri in uris) {
                     try {
                         val base64 = ImageUtil.compressAndEncode(context, uri)
-                        val filename = ImageUtil.generateImageFilename()
+                        val filename = ImageUtil.generateImageFilename(context, uri)
                         Api.uploadImage(token, UploadImageBody(filename, base64))
                     } catch (e: Exception) {
                         e.printStackTrace()

@@ -1,6 +1,9 @@
 # XUCMS — 高性能博客与说说客户端
 
-XUCMS 是一款为自建或托管 CMS 设计的精美 Andorid 客户端。在保障全平台自适应排版的前提下，旨在为您提供最纯粹的随时随地创作、编辑文章及说说（动态）的全新体验。
+XUCMS 是一款为自建或托管 CMS 设计的精美 Android 客户端。在保障全平台自适应排版的前提下，旨在为您提供最纯粹的随时随地创作、编辑文章及说说（动态）的全新体验。
+
+> [!NOTE]
+> 本客户端配套的自部署后端：[blog-admin-workers](https://github.com/ImUpXuu/blog-admin-workers)，可一键部署在 **Cloudflare Workers** 轻量化无服务器边缘计算平台上，提供极其安全、快速、廉价（每天 10 万次免费调用）的 API 支持。
 
 ---
 
