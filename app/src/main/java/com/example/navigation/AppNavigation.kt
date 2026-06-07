@@ -25,6 +25,7 @@ import com.example.data.TokenManager
 import com.example.post.PostEditScreen
 import com.example.post.PostListScreen
 import com.example.settings.SettingsScreen
+import com.example.settings.AboutScreen
 import com.example.talk.TalkEditScreen
 import com.example.gallery.GalleryScreen
 import java.net.URLDecoder
@@ -41,6 +42,7 @@ sealed class Screen(val route: String) {
     }
     object Gallery : Screen("gallery")
     object Settings : Screen("settings")
+    object About : Screen("about")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -178,6 +180,9 @@ fun AppNavigation(tokenManager: TokenManager) {
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(tokenManager, navController)
+            }
+            composable(Screen.About.route) {
+                AboutScreen(navController)
             }
         }
     }

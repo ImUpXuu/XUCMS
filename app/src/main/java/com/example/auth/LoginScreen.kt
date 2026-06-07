@@ -37,6 +37,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(tokenManager: TokenManager, onLoginSuccess: () -> Unit) {
+    val prefs = com.example.LocalAppPreferences.current
+    var baseUrl by remember { mutableStateOf(prefs?.getBaseUrl() ?: "https://edit.upxuu.com") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -63,8 +65,16 @@ fun LoginScreen(tokenManager: TokenManager, onLoginSuccess: () -> Unit) {
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("博客管理后台", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(24.dp))
+                Text("XUCMS 管理后台", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = baseUrl,
+                    onValueChange = { baseUrl = it },
+                    label = { Text("服务器地址 (API Base URL)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
@@ -76,17 +86,24 @@ fun LoginScreen(tokenManager: TokenManager, onLoginSuccess: () -> Unit) {
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
                     onClick = {
-                        if (password.isNotBlank()) {
+                        val trimmedUrl = baseUrl.trim().removeSuffix("/")
+                        if (trimmedUrl.isNotBlank() && password.isNotBlank()) {
                             scope.launch {
                                 isLoading = true
+                                prefs?.setBaseUrl(trimmedUrl)
+                                Api.BASE_URL = trimmedUrl
                                 val res = Api.getTalks(password)
                                 isLoading = false
                                 if (res.isSuccess) {
                                     tokenManager.saveToken(password)
                                     onLoginSuccess()
                                 } else {
-                                    snackbarHostState.showSnackbar("密码错误")
+                                    snackbarHostState.showSnackbar("密码或服务器地址错误")
                                 }
+                            }
+                        } else {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("请填写完整的服务地址与密码")
                             }
                         }
                     },

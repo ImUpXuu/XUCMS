@@ -140,7 +140,7 @@ fun PostListScreen(tokenManager: TokenManager, navController: NavController) {
                                     Text(post.date ?: "-", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
-                                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                                     ) {
                                         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -160,7 +160,7 @@ fun PostListScreen(tokenManager: TokenManager, navController: NavController) {
                                     .fillMaxWidth()
                                     .padding(bottom = 12.dp)
                                     .clickable { navController.navigate(Screen.PostEdit.createRoute(post.name, post.sha)) },
-                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                 shape = RoundedCornerShape(16.dp),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {

@@ -42,7 +42,6 @@ fun SettingsScreen(tokenManager: TokenManager, navController: NavController) {
     val currentTheme by prefs?.themeMode?.collectAsState() ?: androidx.compose.runtime.mutableStateOf(ThemeMode.SYSTEM)
 
     var showThemeDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var showAboutDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("设置") }) }
@@ -76,7 +75,7 @@ fun SettingsScreen(tokenManager: TokenManager, navController: NavController) {
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth().clickable { showAboutDialog = true }
+                modifier = Modifier.fillMaxWidth().clickable { navController.navigate(Screen.About.route) }
             ) {
                 Row(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
                     Text("关于", style = MaterialTheme.typography.titleMedium)
@@ -128,27 +127,6 @@ fun SettingsScreen(tokenManager: TokenManager, navController: NavController) {
             },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = { showThemeDialog = false }) {
-                    Text("关闭")
-                }
-            }
-        )
-    }
-
-    if (showAboutDialog) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showAboutDialog = false },
-            title = { Text("关于") },
-            text = {
-                Column {
-                    Text("App 名称: XUCMS", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("版本号: 1.0.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("隐私政策: 本应用仅连接到您配置的 API 地址，不会将您的文章与说说上传至第三方服务器。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { showAboutDialog = false }) {
                     Text("关闭")
                 }
             }

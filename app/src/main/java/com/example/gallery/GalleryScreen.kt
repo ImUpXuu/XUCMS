@@ -6,13 +6,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.InsertPhoto
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +26,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -47,6 +51,7 @@ fun GalleryScreen(tokenManager: TokenManager) {
     var uploadProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) } // Current, Total
     var selectedImage by remember { mutableStateOf<ImageItem?>(null) }
     var showDeleteConfirm by remember { mutableStateOf<ImageItem?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
     
     fun loadData() {
         scope.launch {
@@ -60,6 +65,10 @@ fun GalleryScreen(tokenManager: TokenManager) {
     }
 
     LaunchedEffect(Unit) { loadData() }
+
+    val filteredImages = remember(images, searchQuery) {
+        images.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    }
 
     val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty()) {
@@ -104,43 +113,73 @@ fun GalleryScreen(tokenManager: TokenManager) {
                     modifier = Modifier.padding(8.dp).align(Alignment.CenterHorizontally)
                 )
             }
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("搜索图库内文件名") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "清除")
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+
             if (isLoading && images.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
+            } else if (filteredImages.isEmpty()) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text("无图片记录", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    contentPadding = PaddingValues(4.dp),
-                    modifier = Modifier.fillMaxSize()
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    items(images) { img ->
-                        val proxyUrl = "https://edit.upxuu.com/img/${img.path}"
-                        val encodedProxy = URLEncoder.encode(proxyUrl, "UTF-8")
-                        val thumbUrl = "https://wsrv.nl/?url=$encodedProxy&w=300&h=300&fit=cover&a=top"
-
-                        Box(
+                    items(filteredImages) { img ->
+                        Card(
                             modifier = Modifier
-                                .aspectRatio(1f)
-                                .padding(4.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { selectedImage = img }
+                                .fillMaxWidth()
+                                .clickable { selectedImage = img },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                         ) {
-                            AsyncImage(
-                                model = thumbUrl,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
-                                placeholder = null,
-                                error = null
-                            )
-                            Box(
+                            Row(
                                 modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .background(Color.Black.copy(alpha = 0.5f))
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    .padding(14.dp)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(img.name, color = Color.White, fontSize = 11.sp, maxLines = 1)
+                                Icon(
+                                    imageVector = Icons.Default.InsertPhoto,
+                                    contentDescription = "图片",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(
+                                    text = img.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
+                                    contentDescription = "详情",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
                             }
                         }
                     }
@@ -151,28 +190,40 @@ fun GalleryScreen(tokenManager: TokenManager) {
 
     if (selectedImage != null) {
         val img = selectedImage!!
-        val proxyUrl = "https://edit.upxuu.com/img/${img.path}"
+        val baseUrl = Api.BASE_URL.removeSuffix("/")
+        val proxyUrl = "$baseUrl/img/${img.path}"
         ModalBottomSheet(onDismissRequest = { selectedImage = null }) {
             Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
-                AsyncImage(
-                    model = proxyUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxWidth().height(250.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = proxyUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(img.name, style = MaterialTheme.typography.titleMedium)
                 Spacer(modifier = Modifier.height(16.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = {
                         clipboardManager.setText(AnnotatedString(proxyUrl))
                         selectedImage = null
+                        android.widget.Toast.makeText(context, "已复制图片链接！", android.widget.Toast.LENGTH_SHORT).show()
                     }) {
                         Text("复制链接")
                     }
                     Button(onClick = {
                         clipboardManager.setText(AnnotatedString("![${img.name}]($proxyUrl)"))
                         selectedImage = null
+                        android.widget.Toast.makeText(context, "已复制 Markdown 格式！", android.widget.Toast.LENGTH_SHORT).show()
                     }) {
                         Text("复制 Markdown")
                     }

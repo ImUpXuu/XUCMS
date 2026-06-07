@@ -85,7 +85,8 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                         val filename = ImageUtil.generateImageFilename()
                         val res = Api.uploadImage(token, UploadImageBody(filename, base64))
                         if (res.isSuccess) {
-                            val url = "https://edit.upxuu.com/img/${filename}"
+                            val baseUrl = Api.BASE_URL.removeSuffix("/")
+                            val url = "$baseUrl/img/${filename}"
                             if (isRawMode) {
                                 rawText += "\n![]($url)\n"
                             } else {
@@ -175,7 +176,8 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
         GallerySelectionModal(
             token = token,
             onInsert = { imgs ->
-                val appended = imgs.joinToString("\n") { "![${it.name}](https://edit.upxuu.com/img/${it.path})" }
+                val baseUrl = Api.BASE_URL.removeSuffix("/")
+                val appended = imgs.joinToString("\n") { "![${it.name}]($baseUrl/img/${it.path})" }
                 if (isRawMode) {
                     rawText += "\n$appended\n"
                 } else {
