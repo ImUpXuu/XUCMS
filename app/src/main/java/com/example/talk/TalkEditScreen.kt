@@ -3,14 +3,17 @@ package com.example.talk
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -42,7 +45,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, filename: String?, sha: String?) {
     val isNew = filename == null
@@ -67,9 +70,8 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
     val context = LocalContext.current
     
     val prefs = com.example.LocalAppPreferences.current
-    var isRawMode by remember { mutableStateOf(false) }
-    var rawText by remember { mutableStateOf("") }
     var autoSaveStatus by remember { mutableStateOf("") }
+    var imageToDelete by remember { mutableStateOf<String?>(null) }
 
     // List bottom sheet state
     var showListSheet by remember { mutableStateOf(false) }
@@ -90,14 +92,8 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                         if (res.isSuccess) {
                             val baseUrl = Api.BASE_URL.removeSuffix("/")
                             val url = "$baseUrl/img/${fname}"
-                            if (isRawMode) {
-                                rawText += "\n![]($url)\n"
-                            } else {
-                                rawText = richTextState.toMarkdown()
-                                isRawMode = true
-                                rawText += "\n![]($url)\n"
-                                android.widget.Toast.makeText(context, "已切换至源码模式以防图片格式受损", android.widget.Toast.LENGTH_SHORT).show()
-                            }
+                            val currentMd = richTextState.toMarkdown()
+                            richTextState.setMarkdown("$currentMd\n[IMG:$url]\n")
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -121,8 +117,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 title = fm.title
                 date = fm.published
                 tags = fm.tags.joinToString(", ")
-                richTextState.setMarkdown(fm.body)
-                rawText = fm.body
+                richTextState.setMarkdown(ImageUtil.mdToEditor(fm.body))
             } else {
                 error = res.exceptionOrNull()?.message
             }
@@ -144,18 +139,17 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 title = fm.title
                 date = fm.published
                 tags = fm.tags.joinToString(", ")
-                richTextState.setMarkdown(fm.body)
-                rawText = fm.body
+                richTextState.setMarkdown(ImageUtil.mdToEditor(fm.body))
             }
         }
     }
 
-    LaunchedEffect(title, date, tags, richTextState.annotatedString, rawText, isRawMode) {
+    LaunchedEffect(title, date, tags, richTextState.annotatedString) {
         if (isLoading || isSaving) return@LaunchedEffect
-        if (title.isBlank() && rawText.isBlank()) return@LaunchedEffect
+        if (title.isBlank() && richTextState.toMarkdown().isBlank()) return@LaunchedEffect
         kotlinx.coroutines.delay(30000)
         autoSaveStatus = "保存中..."
-        val currentMd = if (isRawMode) rawText else richTextState.toMarkdown()
+        val currentMd = ImageUtil.editorToMd(richTextState.toMarkdown())
         val fmStr = FrontmatterParser.buildTalkFrontmatter(
             title = title,
             date = date,
@@ -174,15 +168,9 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
             token = token,
             onInsert = { imgs ->
                 val baseUrl = Api.BASE_URL.removeSuffix("/")
-                val appended = imgs.joinToString("\n") { "![${it.name}]($baseUrl/img/${it.path})" }
-                if (isRawMode) {
-                    rawText += "\n$appended\n"
-                } else {
-                    rawText = richTextState.toMarkdown()
-                    isRawMode = true
-                    rawText += "\n$appended\n"
-                    android.widget.Toast.makeText(context, "已切换至源码模式以防图片格式受损", android.widget.Toast.LENGTH_SHORT).show()
-                }
+                val appended = imgs.joinToString("\n") { "[IMG:$baseUrl/img/${it.path}]" }
+                val currentMd = richTextState.toMarkdown()
+                richTextState.setMarkdown("$currentMd\n$appended\n")
                 showGalleryModal = false
             },
             onDismiss = { showGalleryModal = false }
@@ -327,7 +315,7 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                                             title = title,
                                             date = date,
                                             tags = tags.split(",").map { it.trim() }.filter { it.isNotEmpty() },
-                                            body = richTextState.toMarkdown()
+                                            body = ImageUtil.editorToMd(richTextState.toMarkdown())
                                         )
                                         val targetFilename = if (isNew) previewFilename else filename!!
                                         val res = Api.putTalk(token, targetFilename, TalkPutBody(fm, currentSha))
@@ -392,74 +380,56 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (!isRawMode) {
-                        var expanded by remember { mutableStateOf(false) }
-                        Box {
-                            TextButton(onClick = { expanded = true }) { Text("H ▼") }
-                            androidx.compose.material3.DropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
-                            ) {
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text("H1 大标题") },
-                                    onClick = { 
-                                        richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold))
-                                        expanded = false 
-                                    }
-                                )
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text("H2 中标题") },
-                                    onClick = { 
-                                        richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold))
-                                        expanded = false 
-                                    }
-                                )
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text("H3 小标题") },
-                                    onClick = { 
-                                        richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold))
-                                        expanded = false 
-                                    }
-                                )
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text("P 正文") },
-                                    onClick = { 
-                                        richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 16.sp))
-                                        expanded = false 
-                                    }
-                                )
-                            }
+                    var expanded by remember { mutableStateOf(false) }
+                    Box {
+                        TextButton(onClick = { expanded = true }) { Text("H ▼") }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("H1 大标题") },
+                                onClick = { 
+                                    richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold))
+                                    expanded = false 
+                                }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("H2 中标题") },
+                                onClick = { 
+                                    richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold))
+                                    expanded = false 
+                                }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("H3 小标题") },
+                                onClick = { 
+                                    richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                                    expanded = false 
+                                }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("P 正文") },
+                                onClick = { 
+                                    richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 16.sp))
+                                    expanded = false 
+                                }
+                            )
                         }
-                        TextButton(onClick = {
-                            val md = richTextState.toMarkdown() + "\n---\n"
-                            richTextState.setMarkdown(md) 
-                        }) { Text("---") }
-                        IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) }) { Icon(Icons.Default.FormatBold, "Bold") }
-                        IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontStyle = FontStyle.Italic)) }) { Icon(Icons.Default.FormatItalic, "Italic") }
-                        IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)) }) { Icon(Icons.Default.FormatUnderlined, "Underline") }
-                        IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)) }) { Icon(Icons.Default.FormatStrikethrough, "Strike") }
-                        IconButton(onClick = { richTextState.toggleUnorderedList() }) { Icon(Icons.Default.FormatListBulleted, "UL") }
-                        IconButton(onClick = { richTextState.toggleOrderedList() }) { Icon(Icons.Default.FormatListNumbered, "OL") }
-                    } else {
-                        TextButton(onClick = { rawText += "\n---\n" }) { Text("---") }
                     }
+                    TextButton(onClick = {
+                        val md = richTextState.toMarkdown() + "\n---\n"
+                        richTextState.setMarkdown(md) 
+                    }) { Text("---") }
+                    IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) }) { Icon(Icons.Default.FormatBold, "Bold") }
+                    IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontStyle = FontStyle.Italic)) }) { Icon(Icons.Default.FormatItalic, "Italic") }
+                    IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)) }) { Icon(Icons.Default.FormatUnderlined, "Underline") }
+                    IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)) }) { Icon(Icons.Default.FormatStrikethrough, "Strike") }
+                    IconButton(onClick = { richTextState.toggleUnorderedList() }) { Icon(Icons.Default.FormatListBulleted, "UL") }
+                    IconButton(onClick = { richTextState.toggleOrderedList() }) { Icon(Icons.Default.FormatListNumbered, "OL") }
                     Spacer(Modifier.width(8.dp))
                     IconButton(onClick = { imageUploadLauncher.launch("image/*") }) { Icon(Icons.Default.AddPhotoAlternate, "上传图片") }
                     IconButton(onClick = { showGalleryModal = true }) { Icon(Icons.Default.PhotoLibrary, "图库") }
-                    Spacer(Modifier.weight(1f))
-                    Row(
-                        modifier = Modifier.clickable { 
-                            if (isRawMode) {
-                                richTextState.setMarkdown(rawText)
-                            } else {
-                                rawText = richTextState.toMarkdown()
-                            }
-                            isRawMode = !isRawMode 
-                        }.padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(if (isRawMode) "渲染" else "源码", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
-                    }
                 }
 
                 if (autoSaveStatus.isNotEmpty()) {
@@ -468,38 +438,110 @@ fun TalkEditScreen(tokenManager: TokenManager, navController: NavController, fil
 
                 Divider()
 
-                if (isRawMode) {
-                    OutlinedTextField(
-                        value = rawText,
-                        onValueChange = { rawText = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color.Transparent,
-                            unfocusedBorderColor = Color.Transparent
-                        ),
-                        placeholder = { Text("使用 Markdown 语法编写说说...") }
-                    )
-                } else {
-                    RichTextEditor(
-                        state = richTextState,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(16.dp),
-                        colors = RichTextEditorDefaults.richTextEditorColors(
-                            containerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent
-                        ),
-                        placeholder = { Text("开始编写说说...") }
+                RichTextEditor(
+                    state = richTextState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(16.dp),
+                    colors = RichTextEditorDefaults.richTextEditorColors(
+                        containerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent
+                    ),
+                    placeholder = { Text("开始编写说说...") }
+                )
+
+                Divider()
+
+                val currentMarkdown = richTextState.toMarkdown()
+                val imageUrls = remember(currentMarkdown) {
+                    val regex = Regex("""\[IMG:([^\]]+)\]""")
+                    regex.findAll(currentMarkdown).map { it.groupValues[1] }.distinct().toList()
+                }
+
+                if (imageToDelete != null) {
+                    AlertDialog(
+                        onDismissRequest = { imageToDelete = null },
+                        title = { Text("确认删除图片？") },
+                        text = { Text("是否从说说中删除这张图片？这将同时移除正文中对应的 [IMG] 标记。") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val url = imageToDelete!!
+                                    val newMd = richTextState.toMarkdown().replace("[IMG:$url]", "")
+                                    richTextState.setMarkdown(newMd)
+                                    imageToDelete = null
+                                }
+                            ) {
+                                Text("删除", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { imageToDelete = null }) {
+                                Text("取消")
+                            }
+                        }
                     )
                 }
-                
-                Divider()
-                
+
+                if (imageUrls.isNotEmpty()) {
+                    Text(
+                        "本次说说包含的图片 (长按图片进行删除)",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        imageUrls.forEach { url ->
+                            Card(
+                                modifier = Modifier
+                                    .width(100.dp)
+                                    .fillMaxHeight()
+                                    .combinedClickable(
+                                        onClick = { },
+                                        onLongClick = { imageToDelete = url }
+                                    ),
+                                shape = RoundedCornerShape(8.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    coil.compose.AsyncImage(
+                                        model = url,
+                                        contentDescription = "文章图片",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .align(Alignment.BottomCenter)
+                                            .background(Color.Black.copy(alpha = 0.6f))
+                                            .padding(2.dp)
+                                    ) {
+                                        Text(
+                                            "[IMG]",
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Divider()
+                }
+
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier

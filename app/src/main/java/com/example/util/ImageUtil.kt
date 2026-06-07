@@ -51,4 +51,20 @@ object ImageUtil {
         val random = String.format("%03d", Random.nextInt(1000))
         return "${pathSdf.format(date)}/${nameSdf.format(date)}_$random.$ext"
     }
+
+    fun mdToEditor(md: String): String {
+        val regex = Regex("""!\[([^\]]*)\]\(([^)]+)\)""")
+        return regex.replace(md) { matchResult ->
+            val url = matchResult.groupValues[2]
+            "[IMG:$url]"
+        }
+    }
+
+    fun editorToMd(editorText: String): String {
+        val regex = Regex("""\[IMG:([^\]]+)\]""")
+        return regex.replace(editorText) { matchResult ->
+            val url = matchResult.groupValues[1]
+            "![]($url)"
+        }
+    }
 }
