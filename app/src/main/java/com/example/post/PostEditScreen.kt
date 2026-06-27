@@ -1,5 +1,7 @@
 package com.example.post
 
+import android.os.Build
+import android.text.Html
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -26,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
 import com.example.data.Api
 import com.example.data.PostPutBody
@@ -35,9 +38,7 @@ import com.example.gallery.GallerySelectionModal
 import com.example.navigation.Screen
 import com.example.util.FrontmatterParser
 import com.example.util.ImageUtil
-import com.mohamedrejeb.richeditor.model.rememberRichTextState
-import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
-import com.mohamedrejeb.richeditor.ui.material3.RichTextEditorDefaults
+import com.example.util.SimpleMarkdownParser
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -50,7 +51,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
     val token = tokenManager.getToken() ?: ""
     val scope = rememberCoroutineScope()
     
-    val richTextState = rememberRichTextState()
+    var markdownContent by remember { mutableStateOf("") }
 
     var title by remember { mutableStateOf("") }
     var published by remember { mutableStateOf("") }
@@ -75,6 +76,9 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
     
     val prefs = com.example.LocalAppPreferences.current
     var autoSaveStatus by remember { mutableStateOf("") }
+    
+    // 即时渲染预览模式
+    var showPreview by remember { mutableStateOf(false) }
 
     val imageUploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty()) {
@@ -88,9 +92,8 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                         if (res.isSuccess) {
                             val baseUrl = Api.BASE_URL.removeSuffix("/")
                             val url = "$baseUrl/img/${filename}"
-                            val currentMd = richTextState.toMarkdown()
-                            val updatedMd = "$currentMd\n![]($url)\n"
-                            richTextState.setMarkdown(updatedMd)
+                            val imgMd = "![uploaded image]($url)"
+                            markdownContent = if (markdownContent.isBlank()) imgMd else "$markdownContent\n$imgMd"
                             if (image.isBlank()) {
                                 image = url
                             }
@@ -120,7 +123,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 image = fm.image
                 draft = fm.draft
                 sticky = fm.sticky.toString()
-                richTextState.setMarkdown(fm.body)
+                markdownContent = fm.body
             } else {
                 error = res.exceptionOrNull()?.message
             }
@@ -139,18 +142,17 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 image = fm.image
                 draft = fm.draft
                 sticky = fm.sticky.toString()
-                richTextState.setMarkdown(fm.body)
+                markdownContent = fm.body
             }
         }
     }
 
-    LaunchedEffect(title, published, tags, category, description, image, draft, sticky, richTextState.annotatedString) {
+    LaunchedEffect(title, published, tags, category, description, image, draft, sticky, markdownContent) {
         if (isLoading || isSaving) return@LaunchedEffect
         // ignore initial empty state
-        if (title.isBlank() && richTextState.toMarkdown().isBlank()) return@LaunchedEffect
+        if (title.isBlank() && markdownContent.isBlank()) return@LaunchedEffect
         kotlinx.coroutines.delay(30000)
         autoSaveStatus = "保存中..."
-        val currentMd = richTextState.toMarkdown()
         val fmStr = FrontmatterParser.buildPostFrontmatter(
             com.example.util.FrontmatterResult(
                 title = title,
@@ -161,7 +163,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                 image = image,
                 draft = draft,
                 sticky = sticky.toIntOrNull() ?: 0,
-                body = currentMd
+                body = markdownContent
             )
         )
         prefs?.saveDraft("post_${filename ?: "new"}", fmStr)
@@ -176,10 +178,8 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
             token = token,
             onInsert = { imgs ->
                 val baseUrl = Api.BASE_URL.removeSuffix("/")
-                val appended = imgs.joinToString("\n") { "![]($baseUrl/img/${it.path})" }
-                val currentMd = richTextState.toMarkdown()
-                val updatedMd = "$currentMd\n$appended\n"
-                richTextState.setMarkdown(updatedMd)
+                val appended = imgs.joinToString("\n") { "![gallery image]($baseUrl/img/${it.path})" }
+                markdownContent = if (markdownContent.isBlank()) appended else "$markdownContent\n$appended"
                 if (image.isBlank() && imgs.isNotEmpty()) {
                     image = "$baseUrl/img/${imgs.first().path}"
                 }
@@ -217,7 +217,6 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                                 onClick = {
                                     scope.launch {
                                         isSaving = true
-                                        val bodyMarkdown = richTextState.toMarkdown()
                                         val fm = FrontmatterParser.buildPostFrontmatter(
                                             com.example.util.FrontmatterResult(
                                                 title = title,
@@ -228,7 +227,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                                                 image = image,
                                                 draft = draft,
                                                 sticky = sticky.toIntOrNull() ?: 0,
-                                                body = bodyMarkdown
+                                                body = markdownContent
                                             )
                                         )
                                         val targetFilename = if (isNew) previewFilename else filename!!
@@ -243,7 +242,7 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                                                 tokenManager.clearToken()
                                                 navController.navigate(Screen.Login.route) { popUpTo(0) }
                                             } else {
-                                                error = "保存失败: \${e?.message}"
+                                                error = "保存失败: ${e?.message}"
                                             }
                                         }
                                     }
@@ -296,48 +295,53 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
                             onDismissRequest = { expanded = false }
                         ) {
                             androidx.compose.material3.DropdownMenuItem(
-                                text = { Text("H1 大标题") },
+                                text = { Text("# H1 大标题") },
                                 onClick = { 
-                                    richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold))
+                                    markdownContent += "\n# ${title}\n"
                                     expanded = false 
                                 }
                             )
                             androidx.compose.material3.DropdownMenuItem(
-                                text = { Text("H2 中标题") },
+                                text = { Text("## H2 中标题") },
                                 onClick = { 
-                                    richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold))
+                                    markdownContent += "\n## "
                                     expanded = false 
                                 }
                             )
                             androidx.compose.material3.DropdownMenuItem(
-                                text = { Text("H3 小标题") },
+                                text = { Text("### H3 小标题") },
                                 onClick = { 
-                                    richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                                    markdownContent += "\n### "
                                     expanded = false 
                                 }
                             )
                             androidx.compose.material3.DropdownMenuItem(
                                 text = { Text("P 正文") },
                                 onClick = { 
-                                    richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontSize = 16.sp))
+                                    markdownContent += "\n"
                                     expanded = false 
                                 }
                             )
                         }
                     }
                     TextButton(onClick = {
-                        val md = richTextState.toMarkdown() + "\n---\n"
-                        richTextState.setMarkdown(md) 
+                        markdownContent += "\n---\n"
                     }) { Text("---") }
-                    IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) }) { Icon(Icons.Default.FormatBold, "Bold") }
-                    IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(fontStyle = FontStyle.Italic)) }) { Icon(Icons.Default.FormatItalic, "Italic") }
-                    IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)) }) { Icon(Icons.Default.FormatUnderlined, "Underline") }
-                    IconButton(onClick = { richTextState.toggleSpanStyle(androidx.compose.ui.text.SpanStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)) }) { Icon(Icons.Default.FormatStrikethrough, "Strike") }
-                    IconButton(onClick = { richTextState.toggleUnorderedList() }) { Icon(Icons.Default.FormatListBulleted, "UL") }
-                    IconButton(onClick = { richTextState.toggleOrderedList() }) { Icon(Icons.Default.FormatListNumbered, "OL") }
+                    IconButton(onClick = { markdownContent += "**bold**" }) { Icon(Icons.Default.FormatBold, "Bold") }
+                    IconButton(onClick = { markdownContent += "*italic*" }) { Icon(Icons.Default.FormatItalic, "Italic") }
+                    IconButton(onClick = { markdownContent += "<u>underline</u>" }) { Icon(Icons.Default.FormatUnderlined, "Underline") }
+                    IconButton(onClick = { markdownContent += "~~strike~~" }) { Icon(Icons.Default.FormatStrikethrough, "Strike") }
+                    IconButton(onClick = { markdownContent += "\n- list item" }) { Icon(Icons.Default.FormatListBulleted, "UL") }
+                    IconButton(onClick = { markdownContent += "\n1. numbered item" }) { Icon(Icons.Default.FormatListNumbered, "OL") }
                     Spacer(Modifier.width(8.dp))
                     IconButton(onClick = { imageUploadLauncher.launch("image/*") }) { Icon(Icons.Default.AddPhotoAlternate, "上传图片") }
                     IconButton(onClick = { showGalleryModal = true }) { Icon(Icons.Default.PhotoLibrary, "图库") }
+                    
+                    // 预览切换按钮
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { showPreview = !showPreview }) {
+                        Text(if (showPreview) "编辑" else "预览")
+                    }
                 }
 
                 if (autoSaveStatus.isNotEmpty()) {
@@ -346,19 +350,66 @@ fun PostEditScreen(tokenManager: TokenManager, navController: NavController, fil
 
                 Divider()
 
-                RichTextEditor(
-                    state = richTextState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(16.dp),
-                    colors = RichTextEditorDefaults.richTextEditorColors(
-                        containerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    ),
-                    placeholder = { Text("开始编写正文...") }
-                )
+                // 编辑区和预览区切换
+                if (showPreview) {
+                    // 预览模式 - 使用 Android WebView 渲染 HTML
+                    val htmlContent = remember(markdownContent) {
+                        SimpleMarkdownParser.parse(markdownContent)
+                    }
+                    AndroidView(
+                        factory = { ctx ->
+                            android.webkit.WebView(ctx).apply {
+                                settings.javaScriptEnabled = false
+                                settings.loadWithOverviewMode = true
+                                settings.useWideViewPort = true
+                                isVerticalScrollBarEnabled = true
+                                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(16.dp)
+                            .verticalScroll(rememberScrollState()),
+                        update = { webView ->
+                            val fullHtml = """
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                                    <style>
+                                        body { 
+                                            font-family: sans-serif; 
+                                            padding: 8px; 
+                                            color: #333;
+                                            line-height: 1.6;
+                                        }
+                                        img { max-width: 100%; height: auto; border-radius: 6px; }
+                                        pre { white-space: pre-wrap; word-wrap: break-word; }
+                                        a { color: #2196F3; }
+                                        blockquote { margin: 8px 0; }
+                                    </style>
+                                </head>
+                                <body>$htmlContent</body>
+                                </html>
+                            """.trimIndent()
+                            webView.loadDataWithBaseURL(null, fullHtml, "text/html", "UTF-8", null)
+                        }
+                    )
+                } else {
+                    // 编辑模式
+                    TextField(
+                        value = markdownContent,
+                        onValueChange = { markdownContent = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(16.dp),
+                        placeholder = { Text("开始编写正文...") },
+                        minLines = 20,
+                        maxLines = Int.MAX_VALUE
+                    )
+                }
 
                 Divider()
 
