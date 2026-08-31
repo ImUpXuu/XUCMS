@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Used below API 31; keep in step with data_extraction_rules.xml. -->
+<!--
+  Used below API 31; keep in step with data_extraction_rules.xml.
+  Only these paths are backed up, so the credentials file is left out simply by
+  not being listed — an explicit <exclude> outside an included path is a lint error.
+-->
 <full-backup-content>
     <include domain="file" path="drafts" />
     <include domain="sharedpref" path="xucms_settings.xml" />
-    <exclude domain="sharedpref" path="xucms_credentials.xml" />
 </full-backup-content>

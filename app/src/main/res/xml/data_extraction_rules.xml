@@ -2,14 +2,16 @@
 <!--
   Local data must survive an app update, a device transfer and a cloud restore:
   drafts are the user's unpublished writing and settings hold the server address.
-  The admin key is deliberately excluded — a secret should not ride along in a
-  cloud backup, so the user re-enters it once after a restore.
+
+  Only listed paths are backed up, so the admin key stays out of cloud backup by
+  being absent rather than by an explicit <exclude>, which lint rejects outside an
+  included path. Device transfer is a direct phone-to-phone handoff, so the key
+  goes along there and the user does not have to sign in again.
 -->
 <data-extraction-rules>
     <cloud-backup>
         <include domain="file" path="drafts" />
         <include domain="sharedpref" path="xucms_settings.xml" />
-        <exclude domain="sharedpref" path="xucms_credentials.xml" />
     </cloud-backup>
     <device-transfer>
         <include domain="file" path="drafts" />
