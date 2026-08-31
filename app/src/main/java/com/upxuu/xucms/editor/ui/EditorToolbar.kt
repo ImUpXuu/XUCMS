@@ -1,5 +1,9 @@
 package com.upxuu.xucms.editor.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -36,9 +40,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -151,14 +157,26 @@ private fun StyleChip(
 ) {
   val selected = current == type
   val colors = MaterialTheme.colorScheme
+  // Colour animates so tapping through styles reads as one continuous control
+  // rather than four separate buttons blinking.
+  val container by animateColorAsState(
+    targetValue = if (selected) colors.primaryContainer else Color.Transparent,
+    animationSpec = tween(160),
+    label = "chip-container",
+  )
+  val contentColor by animateColorAsState(
+    targetValue = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
+    animationSpec = tween(160),
+    label = "chip-content",
+  )
   Text(
     text = label,
     style = MaterialTheme.typography.labelLarge,
     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-    color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
+    color = contentColor,
     modifier = Modifier
       .clip(RoundedCornerShape(9.dp))
-      .background(if (selected) colors.primaryContainer else Color.Transparent)
+      .background(container)
       .clickable(onClick = onClick)
       .padding(horizontal = 11.dp, vertical = 9.dp),
   )
@@ -173,21 +191,31 @@ private fun ToolbarIcon(
   onClick: () -> Unit = {},
 ) {
   val colors = MaterialTheme.colorScheme
-  val tint = when {
-    !enabled -> colors.onSurfaceVariant.copy(alpha = 0.35f)
-    selected -> colors.onPrimaryContainer
-    else -> colors.onSurfaceVariant
-  }
-  PressableIcon(
-    onClick = onClick,
-    enabled = enabled,
-    background = if (selected) colors.primaryContainer else Color.Transparent,
-  ) {
+  val tint by animateColorAsState(
+    targetValue = when {
+      !enabled -> colors.onSurfaceVariant.copy(alpha = 0.35f)
+      selected -> colors.onPrimaryContainer
+      else -> colors.onSurfaceVariant
+    },
+    animationSpec = tween(160),
+    label = "icon-tint",
+  )
+  val background by animateColorAsState(
+    targetValue = if (selected) colors.primaryContainer else Color.Transparent,
+    animationSpec = tween(160),
+    label = "icon-bg",
+  )
+  val scale by animateFloatAsState(
+    targetValue = if (selected) 1.08f else 1f,
+    animationSpec = spring(dampingRatio = 0.45f, stiffness = 700f),
+    label = "icon-scale",
+  )
+  PressableIcon(onClick = onClick, enabled = enabled, background = background) {
     Icon(
       imageVector = icon,
       contentDescription = label,
       tint = tint,
-      modifier = Modifier.size(20.dp),
+      modifier = Modifier.size(20.dp).scale(scale),
     )
   }
 }

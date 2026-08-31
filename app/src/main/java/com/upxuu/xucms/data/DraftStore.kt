@@ -34,6 +34,17 @@ data class Draft(
   val isUnpublished: Boolean get() = filename == null
 }
 
+/** Shape of drafts written by the first release, kept only for migration. */
+@Serializable
+private data class LegacyDraft(
+  val key: String = "",
+  val kind: String = NoteKind.POST.name,
+  val filename: String? = null,
+  val sha: String? = null,
+  val markdown: String = "",
+  val updatedAt: Long = 0L,
+)
+
 /**
  * File-backed draft store. One AUTO draft per note (overwritten by the autosave
  * timer) plus any number of MANUAL snapshots.
@@ -42,6 +53,39 @@ class DraftStore(context: Context) {
 
   private val dir = File(context.filesDir, "drafts").apply { mkdirs() }
   private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+  init {
+    migrateLegacyDrafts()
+  }
+
+  /**
+   * Drafts written before the AUTO/MANUAL split used a `key` field and no `id`,
+   * which would fail to deserialize and silently lose the user's writing. Rewrite
+   * them in place, treating each as the note's autosave slot.
+   */
+  private fun migrateLegacyDrafts() {
+    runCatching {
+      dir.listFiles { file -> file.extension == "json" } ?: return@runCatching
+    }.getOrNull()?.forEach { file ->
+      runCatching {
+        val text = file.readText()
+        if (text.contains("\"id\"")) return@runCatching
+        val legacy = json.decodeFromString(LegacyDraft.serializer(), text)
+        val kind = runCatching { NoteKind.valueOf(legacy.kind) }.getOrDefault(NoteKind.POST)
+        val migrated = Draft(
+          id = autoId(kind, legacy.filename),
+          kind = kind.name,
+          draftKind = DraftKind.AUTO.name,
+          filename = legacy.filename,
+          sha = legacy.sha,
+          markdown = legacy.markdown,
+          updatedAt = legacy.updatedAt,
+        )
+        fileFor(migrated.id).writeText(json.encodeToString(Draft.serializer(), migrated))
+        if (file.name != "${migrated.id}.json") file.delete()
+      }
+    }
+  }
 
   /** Stable identity of a note's autosave slot, so it is replaced not accumulated. */
   fun autoId(kind: NoteKind, filename: String?): String =

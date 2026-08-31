@@ -1,19 +1,19 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Local data must survive an app update, a device transfer and a cloud restore:
+  drafts are the user's unpublished writing and settings hold the server address.
+  The admin key is deliberately excluded — a secret should not ride along in a
+  cloud backup, so the user re-enters it once after a restore.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <include domain="file" path="drafts" />
+        <include domain="sharedpref" path="xucms_settings.xml" />
+        <exclude domain="sharedpref" path="xucms_credentials.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <include domain="file" path="drafts" />
+        <include domain="sharedpref" path="xucms_settings.xml" />
+        <include domain="sharedpref" path="xucms_credentials.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>

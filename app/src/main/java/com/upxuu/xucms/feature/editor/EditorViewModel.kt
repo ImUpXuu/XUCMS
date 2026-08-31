@@ -43,6 +43,7 @@ data class EditorUiState(
   val restoredDraft: Boolean = false,
   val dirty: Boolean = false,
   val drafts: List<Draft> = emptyList(),
+  val draftDeleteRequest: Draft? = null,
   val pendingDraftDelete: Draft? = null,
   val sessionExpired: Boolean = false,
   val finished: Boolean = false,
@@ -255,7 +256,14 @@ class EditorViewModel(
 
   // -------------------------------------------------- draft delete with undo
 
-  fun requestDraftDelete(draft: Draft) {
+  /** Swiping only asks; the dialog confirms, then the undo window runs. */
+  fun askDraftDelete(draft: Draft) = _state.update { it.copy(draftDeleteRequest = draft) }
+
+  fun cancelDraftDelete() = _state.update { it.copy(draftDeleteRequest = null) }
+
+  fun confirmDraftDelete() {
+    val draft = _state.value.draftDeleteRequest ?: return
+    _state.update { it.copy(draftDeleteRequest = null) }
     undoJob?.cancel()
     _state.value.pendingDraftDelete?.let { commitDraftDelete(it) }
     _state.update { it.copy(pendingDraftDelete = draft) }

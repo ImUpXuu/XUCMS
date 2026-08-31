@@ -28,6 +28,23 @@ data class PendingDelete(
   val label: String get() = note?.displayTitle ?: draft?.let { draftTitleOf(it) } ?: ""
 }
 
+/** A delete the user has to confirm in a dialog before the undo window starts. */
+data class DeleteRequest(
+  val note: NoteSummary? = null,
+  val draft: Draft? = null,
+) {
+  val label: String get() = note?.displayTitle ?: draft?.let { draftTitleOf(it) } ?: ""
+
+  val title: String get() = if (note != null) "删除这篇内容？" else "删除这份草稿？"
+
+  val message: String
+    get() = if (note != null) {
+      "「$label」会从云端删除，本地相关草稿也会一并清除。删除后仍有几秒可以撤销。"
+    } else {
+      "「$label」只保存在本机，删除后仍有几秒可以撤销。"
+    }
+}
+
 /** Metadata of one note, loaded on demand for the quick-edit sheet. */
 data class QuickMeta(
   val summary: NoteSummary,
@@ -49,6 +66,7 @@ data class HomeUiState(
   /** Only drafts of notes that were never published; published notes get a pill. */
   val unpublishedDrafts: List<Draft> = emptyList(),
   val filenamesWithChanges: Set<String> = emptySet(),
+  val deleteRequest: DeleteRequest? = null,
   val pendingDelete: PendingDelete? = null,
   val quickMeta: QuickMeta? = null,
   val error: String? = null,
@@ -138,13 +156,22 @@ class HomeViewModel(
 
   // ------------------------------------------------------- delete with undo
 
-  /**
-   * Hides the row and starts a five-second window. Nothing is deleted until the
-   * window closes, so a swipe by accident costs the user nothing.
-   */
-  fun requestDelete(note: NoteSummary) = startUndoWindow(PendingDelete(note = note))
+  /** Swiping only asks; the dialog is what starts a delete. */
+  fun askDelete(note: NoteSummary) = _state.update { it.copy(deleteRequest = DeleteRequest(note = note)) }
 
-  fun requestDelete(draft: Draft) = startUndoWindow(PendingDelete(draft = draft))
+  fun askDelete(draft: Draft) = _state.update { it.copy(deleteRequest = DeleteRequest(draft = draft)) }
+
+  fun cancelDeleteRequest() = _state.update { it.copy(deleteRequest = null) }
+
+  /**
+   * Confirmed: hide the row and start a five-second window. Nothing is actually
+   * removed until the window closes, so the snackbar's 撤销 still works.
+   */
+  fun confirmDelete() {
+    val request = _state.value.deleteRequest ?: return
+    _state.update { it.copy(deleteRequest = null) }
+    startUndoWindow(PendingDelete(note = request.note, draft = request.draft))
+  }
 
   private fun startUndoWindow(pending: PendingDelete) {
     // Commit whatever is already waiting; only one row can be pending at a time.

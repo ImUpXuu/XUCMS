@@ -69,6 +69,22 @@ Each note may hold one `AUTO` draft (overwritten by the autosave timer) plus any
 
 A draft is only written when the content actually differs from the baseline loaded from the server. Opening and closing a note without typing must not create one.
 
+`DraftStore` migrates drafts written by older releases on construction — a schema change must never silently drop the user's unpublished writing. Same reasoning behind the explicit `<include>` entries in `backup_rules.xml` and `data_extraction_rules.xml`: drafts and settings survive an update or a device transfer; the admin key is excluded from cloud backup on purpose.
+
+## Destructive actions
+
+Every delete follows the same three steps, and none may be skipped:
+
+1. A gesture or button only **requests** the delete.
+2. A `ConfirmDeleteDialog` asks.
+3. The row disappears and a snackbar offers 撤销 for five seconds. Only when that window closes does anything actually get removed.
+
+Swipe gestures are never destructive by themselves. `SwipeActionRow` is hand-rolled rather than built on `SwipeToDismissBox`, because that component latches once its threshold is crossed and the user cannot pull the row back. The row follows the finger and always springs home on release.
+
+## Motion
+
+Restrained but present: 150–260ms, `FastOutSlowInEasing` or a light spring. Colour changes on selected controls animate (`animateColorAsState`), list changes use `Modifier.animateItem()`, and screens enter with a small slide plus scale while the outgoing screen only fades. Nothing bounces, spins, or draws attention to itself.
+
 ## Testing
 
 `app/src/test/` holds JVM unit tests for the editor codecs, `MarkSpans`, `EditorState`, and frontmatter mapping. Anything touching `Context` (DraftStore, SettingsStore) has no test — keep the pure logic separable so it stays testable.

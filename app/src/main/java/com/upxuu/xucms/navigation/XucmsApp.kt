@@ -1,8 +1,11 @@
 package com.upxuu.xucms.navigation
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
@@ -48,13 +51,22 @@ fun XucmsApp(navController: NavHostController = rememberNavController()) {
   val signedIn by container.settings.signedInFlow.collectAsState()
   val start = if (signedIn) Routes.HOME else Routes.LOGIN
 
+  // Screens arrive from the right and lift very slightly; the outgoing screen only
+  // fades so two moving surfaces never fight for attention.
+  val enterSpec = tween<Float>(220, easing = FastOutSlowInEasing)
+
   NavHost(
     navController = navController,
     startDestination = start,
-    enterTransition = { fadeIn(tween(180)) + slideInHorizontally(tween(220)) { it / 14 } },
-    exitTransition = { fadeOut(tween(140)) },
-    popEnterTransition = { fadeIn(tween(160)) },
-    popExitTransition = { fadeOut(tween(140)) + slideOutHorizontally(tween(200)) { it / 14 } },
+    enterTransition = {
+      fadeIn(enterSpec) + slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it / 10 } +
+        scaleIn(enterSpec, initialScale = 0.98f)
+    },
+    exitTransition = { fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.99f) },
+    popEnterTransition = { fadeIn(tween(180)) + scaleIn(tween(180), initialScale = 0.99f) },
+    popExitTransition = {
+      fadeOut(tween(160)) + slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { it / 10 }
+    },
   ) {
     composable(Routes.LOGIN) {
       LoginScreen(

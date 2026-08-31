@@ -109,6 +109,7 @@ fun DraftSheet(
               onDelete = { onDelete(draft) },
               onSettings = { onRestore(draft) },
               settingsLabel = "载入",
+              modifier = Modifier.animateItem(),
             ) {
               DraftCard(draft = draft, onClick = { onRestore(draft) })
             }

@@ -3,6 +3,13 @@ package com.upxuu.xucms.feature.editor
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,11 +57,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.upxuu.xucms.LocalAppContainer
+import com.upxuu.xucms.data.DraftKind
 import com.upxuu.xucms.data.NoteKind
 import com.upxuu.xucms.editor.model.InlineMark
 import com.upxuu.xucms.editor.ui.EditorToolbar
 import com.upxuu.xucms.editor.ui.MarkdownEditor
 import com.upxuu.xucms.feature.gallery.GalleryPickerSheet
+import com.upxuu.xucms.ui.components.ConfirmDeleteDialog
 import com.upxuu.xucms.ui.components.Pill
 import com.upxuu.xucms.ui.components.ThinDivider
 import com.upxuu.xucms.ui.rememberViewModel
@@ -150,13 +159,19 @@ fun NoteEditorScreen(
           }
         },
         actions = {
-          if (state.dirty) {
-            Pill(
-              text = "未发布",
-              color = MaterialTheme.colorScheme.onTertiaryContainer,
-              container = MaterialTheme.colorScheme.tertiaryContainer,
-            )
-            Spacer(Modifier.width(4.dp))
+          AnimatedVisibility(
+            visible = state.dirty,
+            enter = fadeIn(tween(180)) + scaleIn(tween(180), initialScale = 0.8f),
+            exit = fadeOut(tween(140)) + scaleOut(tween(140), targetScale = 0.8f),
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Pill(
+                text = "未发布",
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                container = MaterialTheme.colorScheme.tertiaryContainer,
+              )
+              Spacer(Modifier.width(4.dp))
+            }
           }
           IconButton(onClick = { showDrafts = true }) {
             Icon(Icons.Outlined.HistoryEdu, contentDescription = "草稿管理")
@@ -212,7 +227,11 @@ fun NoteEditorScreen(
         )
       }
 
-      AnimatedVisibility(visible = state.restoredDraft) {
+      AnimatedVisibility(
+        visible = state.restoredDraft,
+        enter = expandVertically(tween(220)) + fadeIn(tween(220)),
+        exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
+      ) {
         Surface(color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)) {
           Row(
             modifier = Modifier
@@ -275,7 +294,16 @@ fun NoteEditorScreen(
         viewModel.restoreDraft(draft)
         showDrafts = false
       },
-      onDelete = viewModel::requestDraftDelete,
+      onDelete = viewModel::askDraftDelete,
+    )
+  }
+
+  state.draftDeleteRequest?.let { draft ->
+    ConfirmDeleteDialog(
+      title = if (draft.type == DraftKind.AUTO) "删除自动草稿？" else "删除这份快照？",
+      message = "草稿只保存在本机，删除后仍有几秒可以撤销。",
+      onConfirm = viewModel::confirmDraftDelete,
+      onDismiss = viewModel::cancelDraftDelete,
     )
   }
 

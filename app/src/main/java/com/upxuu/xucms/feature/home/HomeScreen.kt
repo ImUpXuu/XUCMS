@@ -1,6 +1,12 @@
 package com.upxuu.xucms.feature.home
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +67,7 @@ import com.upxuu.xucms.LocalAppContainer
 import com.upxuu.xucms.data.Draft
 import com.upxuu.xucms.data.NoteKind
 import com.upxuu.xucms.data.NoteSummary
+import com.upxuu.xucms.ui.components.ConfirmDeleteDialog
 import com.upxuu.xucms.ui.components.EmptyState
 import com.upxuu.xucms.ui.components.FlatCard
 import com.upxuu.xucms.ui.components.Pill
@@ -182,7 +189,11 @@ fun HomeScreen(
     Column(modifier = Modifier.fillMaxSize().padding(padding)) {
       KindTabs(selected = state.kind, onSelect = viewModel::selectKind)
 
-      AnimatedVisibility(visible = searching) {
+      AnimatedVisibility(
+        visible = searching,
+        enter = expandVertically(tween(200)) + fadeIn(tween(200)),
+        exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
+      ) {
         OutlinedTextField(
           value = state.query,
           onValueChange = viewModel::setQuery,
@@ -229,9 +240,10 @@ fun HomeScreen(
             }
             items(drafts, key = { it.id }) { draft ->
               SwipeActionRow(
-                onDelete = { viewModel.requestDelete(draft) },
+                onDelete = { viewModel.askDelete(draft) },
                 onSettings = { onOpenDraft(draft) },
                 settingsLabel = "继续写",
+                modifier = Modifier.animateItem(),
               ) {
                 DraftRow(draft = draft, onOpen = { onOpenDraft(draft) })
               }
@@ -243,8 +255,9 @@ fun HomeScreen(
 
           items(notes, key = { it.name }) { note ->
             SwipeActionRow(
-              onDelete = { viewModel.requestDelete(note) },
+              onDelete = { viewModel.askDelete(note) },
               onSettings = { viewModel.openQuickMeta(note) },
+              modifier = Modifier.animateItem(),
             ) {
               NoteRow(
                 note = note,
@@ -266,6 +279,15 @@ fun HomeScreen(
         }
       }
     }
+  }
+
+  state.deleteRequest?.let { request ->
+    ConfirmDeleteDialog(
+      title = request.title,
+      message = request.message,
+      onConfirm = viewModel::confirmDelete,
+      onDismiss = viewModel::cancelDeleteRequest,
+    )
   }
 
   state.quickMeta?.let { quick ->
@@ -292,9 +314,23 @@ private fun KindTabs(selected: NoteKind, onSelect: (NoteKind) -> Unit) {
   ) {
     NoteKind.entries.forEach { kind ->
       val active = kind == selected
+      val container by animateColorAsState(
+        targetValue = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        animationSpec = tween(200),
+        label = "tab-container",
+      )
+      val contentColor by animateColorAsState(
+        targetValue = if (active) {
+          MaterialTheme.colorScheme.onPrimary
+        } else {
+          MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(200),
+        label = "tab-content",
+      )
       Surface(
         shape = RoundedCornerShape(10.dp),
-        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        color = container,
         border = if (active) {
           null
         } else {
@@ -306,11 +342,7 @@ private fun KindTabs(selected: NoteKind, onSelect: (NoteKind) -> Unit) {
           text = kind.label,
           style = MaterialTheme.typography.labelLarge,
           fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-          color = if (active) {
-            MaterialTheme.colorScheme.onPrimary
-          } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-          },
+          color = contentColor,
           textAlign = TextAlign.Center,
           modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         )

@@ -26,7 +26,6 @@ import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.BrokenImage
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -40,7 +39,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -58,12 +56,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.upxuu.xucms.LocalAppContainer
 import com.upxuu.xucms.data.GalleryImage
 import com.upxuu.xucms.data.ImagePipeline
+import com.upxuu.xucms.ui.components.ConfirmDeleteDialog
 import com.upxuu.xucms.ui.components.EmptyState
 import com.upxuu.xucms.ui.rememberViewModel
 import kotlinx.coroutines.launch
@@ -254,20 +252,14 @@ fun GalleryScreen(onBack: () -> Unit) {
   }
 
   pendingDelete?.let { image ->
-    AlertDialog(
-      onDismissRequest = { pendingDelete = null },
-      title = { Text("删除图片？") },
-      text = { Text("将从云端删除 ${image.name}，引用它的文章会显示为破图。") },
-      confirmButton = {
-        TextButton(onClick = {
-          viewModel.delete(image)
-          pendingDelete = null
-        }) {
-          Text("删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
-        }
+    ConfirmDeleteDialog(
+      title = "删除图片？",
+      message = "将从云端删除 ${image.name}，引用它的文章会显示为破图。此操作无法撤销。",
+      onConfirm = {
+        viewModel.delete(image)
+        pendingDelete = null
       },
-      dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } },
-      shape = MaterialTheme.shapes.large,
+      onDismiss = { pendingDelete = null },
     )
   }
 }
