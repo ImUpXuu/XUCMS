@@ -20,7 +20,6 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,15 +50,15 @@ fun SwipeActionRow(
   settingsLabel: String = "属性",
   content: @Composable () -> Unit,
 ) {
-  val delete by rememberUpdatedState(onDelete)
-  val settings by rememberUpdatedState(onSettings)
+  val delete = rememberUpdatedState(onDelete)
+  val settings = rememberUpdatedState(onSettings)
 
   val state = rememberSwipeToDismissBoxState(
     positionalThreshold = { width -> width * 0.55f },
     confirmValueChange = { value ->
       when (value) {
-        SwipeToDismissBoxValue.StartToEnd -> delete()
-        SwipeToDismissBoxValue.EndToStart -> settings()
+        SwipeToDismissBoxValue.StartToEnd -> delete.value()
+        SwipeToDismissBoxValue.EndToStart -> settings.value()
         SwipeToDismissBoxValue.Settled -> Unit
       }
       false
