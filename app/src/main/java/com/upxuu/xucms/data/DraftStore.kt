@@ -179,7 +179,14 @@ class DraftStore(context: Context) {
   /** Drafts for notes that exist only locally; the home list shows these on top. */
   fun unpublished(): List<Draft> = all().filter { it.isUnpublished }
 
-  /** Filenames of published notes that currently carry local changes. */
+  /**
+   * Filenames of published notes carrying unsaved edits. Manual snapshots do not
+   * count: the user keeps those on purpose, and they say nothing about whether the
+   * note currently differs from the cloud.
+   */
   fun filenamesWithLocalChanges(kind: NoteKind): Set<String> =
-    all().filter { it.noteKind == kind }.mapNotNull { it.filename }.toSet()
+    all()
+      .filter { it.noteKind == kind && it.type == DraftKind.AUTO }
+      .mapNotNull { it.filename }
+      .toSet()
 }

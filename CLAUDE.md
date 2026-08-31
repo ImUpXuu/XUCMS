@@ -67,9 +67,9 @@ Two distinct situations, and the UI must keep them apart:
 
 Each note may hold one `AUTO` draft (overwritten by the autosave timer) plus any number of `MANUAL` snapshots the user creates.
 
-A draft is only written when the content actually differs from the baseline loaded from the server. Opening and closing a note without typing must not create one.
+A draft is only written when the content actually differs from the baseline loaded from the server, and the comparison must be **normalised**: run the fetched markdown through `applyMarkdown` then `composeMarkdown` before diffing, because the server's byte-for-byte text differs from what this app writes for identical content (frontmatter key order, quoting, `1.` numbering). Comparing raw text marks every note as changed the moment it is opened. `EditorViewModel.load` also deletes an `AUTO` draft that turns out to equal the server copy, so a stale one from an older build stops lying about local changes. Only `AUTO` drafts drive the 有本地改动 pill — manual snapshots are kept on purpose and say nothing about sync state.
 
-`DraftStore` migrates drafts written by older releases on construction — a schema change must never silently drop the user's unpublished writing. Same reasoning behind the explicit `<include>` entries in `backup_rules.xml` and `data_extraction_rules.xml`: drafts and settings survive an update or a device transfer; the admin key is excluded from cloud backup on purpose.
+`DraftStore` migrates drafts written by older releases on construction — a schema change must never silently drop the user's unpublished writing. Same reasoning behind the explicit `<include>` entries in `backup_rules.xml` and `data_extraction_rules.xml`: drafts and settings survive an update or a device transfer; the admin key is absent from cloud backup on purpose (note that with `<include>` present an `<exclude>` outside an included path is a lint error).
 
 ## Destructive actions
 
@@ -80,6 +80,8 @@ Every delete follows the same three steps, and none may be skipped:
 3. The row disappears and a snackbar offers 撤销 for five seconds. Only when that window closes does anything actually get removed.
 
 Swipe gestures are never destructive by themselves. `SwipeActionRow` is hand-rolled rather than built on `SwipeToDismissBox`, because that component latches once its threshold is crossed and the user cannot pull the row back. The row follows the finger and always springs home on release.
+
+Two properties are load-bearing and easy to regress: the gesture must wait for `awaitHorizontalTouchSlopOrCancellation` before claiming the pointer, or it eats the list's vertical scroll; and the action threshold is deliberately long (168dp) so brushing a row while scrolling cannot fire it. The hint behind the row reads 继续滑动 until the pull is far enough to actually do something.
 
 ## Motion
 

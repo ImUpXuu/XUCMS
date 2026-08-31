@@ -116,7 +116,7 @@ fun DraftSheet(
           }
           item(key = "hint") {
             Text(
-              text = "右滑删除，左滑载入",
+              text = "长距离右滑删除，左滑载入",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.outline,
               textAlign = TextAlign.Center,

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.upxuu.xucms.data.ApiException
 import com.upxuu.xucms.data.Draft
+import com.upxuu.xucms.data.DraftKind
 import com.upxuu.xucms.data.DraftStore
 import com.upxuu.xucms.data.ImagePipeline
 import com.upxuu.xucms.data.NoteCodec
@@ -104,7 +105,7 @@ class EditorViewModel(
       if (filename == null) {
         val source = localDraft?.markdown ?: defaultTemplate()
         applyMarkdown(source)
-        baseline = if (localDraft != null) source else composeMarkdown()
+        baseline = composeMarkdown()
         _state.update {
           it.copy(
             loading = false,
@@ -124,7 +125,7 @@ class EditorViewModel(
         // Fall back to the local draft so offline editing still works.
         val source = localDraft?.markdown ?: defaultTemplate()
         applyMarkdown(source)
-        baseline = source
+        baseline = composeMarkdown()
         _state.update {
           it.copy(
             loading = false,
@@ -138,17 +139,33 @@ class EditorViewModel(
       }
 
       val content = remote.getOrThrow()
-      // A draft that differs from the server copy wins: unsaved typing is worth
-      // more than re-fetching what the user already had.
-      val useDraft = localDraft != null && localDraft.markdown.trim() != content.content.trim()
-      val source = if (useDraft) localDraft!!.markdown else content.content
-      applyMarkdown(source)
-      baseline = content.content
+      // Compare like with like: the server's markdown may differ from what this
+      // app would write for identical content (frontmatter key order, quoting,
+      // list numbering), so normalise it through the same pipeline before asking
+      // whether a draft is actually newer.
+      applyMarkdown(content.content)
+      val normalizedRemote = composeMarkdown()
+
+      val useDraft = localDraft != null && localDraft.markdown.trim() != normalizedRemote.trim() &&
+        localDraft.markdown.trim() != content.content.trim()
+      if (useDraft) applyMarkdown(localDraft!!.markdown)
+
+      // The baseline is the normalised remote text, so merely opening a note is
+      // never seen as an edit.
+      baseline = normalizedRemote
+
+      // A draft that turned out to match the server carries no information; drop
+      // it so the list stops claiming there are local changes.
+      if (localDraft != null && !useDraft && localDraft.type == DraftKind.AUTO) {
+        drafts.delete(localDraft.id)
+      }
+
       _state.update {
         it.copy(
           loading = false,
           sha = content.sha,
           restoredDraft = useDraft,
+          dirty = useDraft,
           drafts = drafts.forNote(kind, filename),
         )
       }
@@ -228,8 +245,14 @@ class EditorViewModel(
 
   /** Writes the autosave slot, replacing whatever was there. No-op when unchanged. */
   fun persistDraft(announce: Boolean = true) {
-    if (!hasRealChanges()) return
     val current = _state.value
+    if (!hasRealChanges()) {
+      // Nothing differs from the server copy, so any autosave left over from an
+      // earlier session is stale and would wrongly flag the note as changed.
+      drafts.delete(drafts.autoId(kind, current.filename))
+      _state.update { it.copy(drafts = drafts.forNote(kind, current.filename)) }
+      return
+    }
     drafts.saveAuto(kind, current.filename, current.sha, composeMarkdown())
     _state.update {
       it.copy(

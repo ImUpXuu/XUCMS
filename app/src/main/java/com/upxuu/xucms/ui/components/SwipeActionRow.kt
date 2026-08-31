@@ -5,6 +5,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,11 +39,14 @@ import kotlin.math.abs
 /**
  * One row, two gestures: drag right to delete, drag left to open properties.
  *
- * Deliberately hand-rolled instead of built on `SwipeToDismissBox`, which latches
- * as soon as its threshold is crossed and cannot be pulled back. Here the row
- * follows the finger and always springs home on release, so a half-swipe — or a
- * full one the user changes their mind about mid-gesture — costs nothing. Firing
- * an action never removes the row; the caller confirms destructive work itself.
+ * Hand-rolled rather than built on `SwipeToDismissBox`, which latches once its
+ * threshold is crossed so a half-swipe cannot be pulled back. Here the row follows
+ * the finger and always springs home on release.
+ *
+ * Two things keep it from stealing the list's vertical scroll or firing by
+ * accident: the gesture is only claimed after the finger passes the horizontal
+ * touch slop (a vertical drag is left to the parent), and the action needs a long,
+ * deliberate pull — well past the point where the row visibly moves.
  */
 @Composable
 fun SwipeActionRow(
@@ -56,13 +60,16 @@ fun SwipeActionRow(
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
   val offset = remember { Animatable(0f) }
-  val threshold = with(density) { 88.dp.toPx() }
-  val maxDrag = with(density) { 128.dp.toPx() }
+  val threshold = with(density) { 168.dp.toPx() }
+  val maxDrag = with(density) { 200.dp.toPx() }
 
   Box(modifier = modifier.fillMaxWidth()) {
     val shift = offset.value
     val progress = (abs(shift) / threshold).coerceIn(0f, 1f)
     val deleting = shift > 0f
+    // Only call the action armed once the pull is far enough to fire, so the hint
+    // tells the truth about what releasing will do.
+    val armed = abs(shift) >= threshold
 
     if (abs(shift) > 0.5f) {
       Box(
@@ -71,7 +78,7 @@ fun SwipeActionRow(
           .clip(MaterialTheme.shapes.medium)
           .background(
             (if (deleting) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer)
-              .copy(alpha = 0.3f + 0.7f * progress),
+              .copy(alpha = 0.25f + 0.75f * progress),
           )
           .padding(horizontal = 20.dp),
         contentAlignment = if (deleting) Alignment.CenterStart else Alignment.CenterEnd,
@@ -85,11 +92,10 @@ fun SwipeActionRow(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.Center,
           modifier = Modifier.graphicsLayer {
-            // The hint grows as the gesture approaches the point where it fires.
             val scale = 0.8f + 0.2f * progress
             scaleX = scale
             scaleY = scale
-            alpha = 0.35f + 0.65f * progress
+            alpha = 0.3f + 0.7f * progress
           },
         ) {
           Icon(
@@ -100,7 +106,11 @@ fun SwipeActionRow(
           )
           Spacer(Modifier.width(8.dp))
           Text(
-            text = if (deleting) deleteLabel else settingsLabel,
+            text = when {
+              armed && deleting -> deleteLabel
+              armed -> settingsLabel
+              else -> "继续滑动"
+            },
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = tint,
@@ -118,7 +128,16 @@ fun SwipeActionRow(
             val down = awaitFirstDown(requireUnconsumed = false)
             var dragged = 0f
 
-            horizontalDrag(down.id) { change ->
+            // Leave vertical drags to the enclosing list: this returns null when
+            // the parent claims the gesture first.
+            val slopPassed = awaitHorizontalTouchSlopOrCancellation(down.id) { change, overSlop ->
+              dragged = overSlop
+              change.consume()
+            } ?: return@awaitEachGesture
+
+            scope.launch { offset.snapTo(dragged) }
+
+            horizontalDrag(slopPassed.id) { change ->
               dragged = (dragged + change.positionChange().x).coerceIn(-maxDrag, maxDrag)
               scope.launch { offset.snapTo(dragged) }
               change.consume()
@@ -126,7 +145,7 @@ fun SwipeActionRow(
 
             val released = dragged
             scope.launch {
-              offset.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 650f))
+              offset.animateTo(0f, spring(dampingRatio = 0.78f, stiffness = 620f))
             }
             if (abs(released) >= threshold) {
               if (released > 0f) onDelete() else onSettings()

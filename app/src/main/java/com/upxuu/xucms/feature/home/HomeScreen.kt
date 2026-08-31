@@ -269,7 +269,7 @@ fun HomeScreen(
 
           item(key = "swipe-hint") {
             Text(
-              text = "右滑删除，左滑编辑属性",
+              text = "长距离右滑删除，左滑编辑属性",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.outline,
               textAlign = TextAlign.Center,
