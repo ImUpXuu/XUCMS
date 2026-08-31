@@ -64,25 +64,28 @@ class DraftStore(context: Context) {
    * them in place, treating each as the note's autosave slot.
    */
   private fun migrateLegacyDrafts() {
-    runCatching {
-      dir.listFiles { file -> file.extension == "json" } ?: return@runCatching
-    }.getOrNull()?.forEach { file ->
+    val files = runCatching { dir.listFiles { file -> file.extension == "json" } }
+      .getOrNull()
+      ?: return
+
+    for (file in files) {
       runCatching {
         val text = file.readText()
-        if (text.contains("\"id\"")) return@runCatching
-        val legacy = json.decodeFromString(LegacyDraft.serializer(), text)
-        val kind = runCatching { NoteKind.valueOf(legacy.kind) }.getOrDefault(NoteKind.POST)
-        val migrated = Draft(
-          id = autoId(kind, legacy.filename),
-          kind = kind.name,
-          draftKind = DraftKind.AUTO.name,
-          filename = legacy.filename,
-          sha = legacy.sha,
-          markdown = legacy.markdown,
-          updatedAt = legacy.updatedAt,
-        )
-        fileFor(migrated.id).writeText(json.encodeToString(Draft.serializer(), migrated))
-        if (file.name != "${migrated.id}.json") file.delete()
+        if (!text.contains("\"id\"")) {
+          val legacy = json.decodeFromString(LegacyDraft.serializer(), text)
+          val kind = runCatching { NoteKind.valueOf(legacy.kind) }.getOrDefault(NoteKind.POST)
+          val migrated = Draft(
+            id = autoId(kind, legacy.filename),
+            kind = kind.name,
+            draftKind = DraftKind.AUTO.name,
+            filename = legacy.filename,
+            sha = legacy.sha,
+            markdown = legacy.markdown,
+            updatedAt = legacy.updatedAt,
+          )
+          fileFor(migrated.id).writeText(json.encodeToString(Draft.serializer(), migrated))
+          if (file.name != "${migrated.id}.json") file.delete()
+        }
       }
     }
   }
