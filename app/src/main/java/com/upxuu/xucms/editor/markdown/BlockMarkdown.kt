@@ -70,14 +70,14 @@ object BlockMarkdown {
         continue
       }
 
-      // Blockquote — consecutive `>` lines fold into one block.
+      // Blockquote — one block per line, so each line can be edited and styled
+      // on its own. Consecutive quote blocks serialize back tightly.
       if (trimmed.startsWith(">")) {
-        val body = mutableListOf<String>()
         while (i < lines.size && lines[i].trim().startsWith(">")) {
-          body += lines[i].trim().removePrefix(">").removePrefix(" ")
+          val body = lines[i].trim().removePrefix(">").removePrefix(" ")
+          blocks += inlineBlock(BlockType.QUOTE, body.trim())
           i++
         }
-        blocks += inlineBlock(BlockType.QUOTE, body.joinToString("\n").trim())
         continue
       }
 
@@ -94,18 +94,10 @@ object BlockMarkdown {
         continue
       }
 
-      // Paragraph: keep consuming until a blank line or another block starts.
-      val paragraph = mutableListOf(trimmed)
+      // Paragraph: one block per line. Folding wrapped lines into a single block
+      // would mean styling or editing one visual line affects its neighbours.
+      blocks += inlineBlock(BlockType.PARAGRAPH, trimmed)
       i++
-      while (i < lines.size) {
-        val next = lines[i]
-        val nextTrimmed = next.trim()
-        if (nextTrimmed.isEmpty()) break
-        if (startsNewBlock(next, nextTrimmed)) break
-        paragraph += nextTrimmed
-        i++
-      }
-      blocks += inlineBlock(BlockType.PARAGRAPH, paragraph.joinToString("\n"))
     }
 
     return if (blocks.isEmpty()) listOf(Block.paragraph()) else blocks
@@ -161,9 +153,10 @@ object BlockMarkdown {
   }
 
   private fun needsBlankLine(previous: Block, next: Block): Boolean {
-    // Consecutive list items of the same family stay tight; everything else is
-    // separated so the markdown reads well outside the app too.
+    // Same-family runs stay tight — list items, and consecutive quote lines that
+    // the editor holds as separate blocks but that read as one quote.
     if (previous.type.isList && next.type.isList) return false
+    if (previous.type == BlockType.QUOTE && next.type == BlockType.QUOTE) return false
     return true
   }
 
@@ -239,4 +232,7 @@ object BlockMarkdown {
     val hashes = trimmed.takeWhile { it == '#' }.length
     return hashes in 1..6 && trimmed.length > hashes && trimmed[hashes] == ' '
   }
+
+  /** Kept for callers that need to know whether a line would open a new block. */
+  fun opensBlock(line: String): Boolean = startsNewBlock(line, line.trim())
 }

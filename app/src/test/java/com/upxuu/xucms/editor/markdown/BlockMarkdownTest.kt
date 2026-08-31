@@ -57,10 +57,20 @@ class BlockMarkdownTest {
   }
 
   @Test
-  fun `blockquote lines fold into one block`() {
+  fun `each quote line is its own block but serializes back tightly`() {
     val blocks = BlockMarkdown.parse("> line one\n> line two")
-    assertEquals(BlockType.QUOTE, blocks.single().type)
-    assertEquals("line one\nline two", blocks.single().text)
+    assertEquals(2, blocks.size)
+    assertTrue(blocks.all { it.type == BlockType.QUOTE })
+    assertEquals(listOf("line one", "line two"), blocks.map { it.text })
+    assertEquals("> line one\n> line two", BlockMarkdown.serialize(blocks))
+  }
+
+  @Test
+  fun `consecutive text lines stay separate blocks`() {
+    // Folding them would make styling one line affect its neighbours.
+    val blocks = BlockMarkdown.parse("first line\nsecond line")
+    assertEquals(2, blocks.size)
+    assertEquals(listOf("first line", "second line"), blocks.map { it.text })
   }
 
   @Test

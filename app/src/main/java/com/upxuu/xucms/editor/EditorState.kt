@@ -96,7 +96,7 @@ class EditorState(initialMarkdown: String = "") {
 
   /**
    * Applies a text field change coming from a block's editor, remapping inline
-   * marks and running markdown auto-formatting (`# `, `- `, `> `, ``` ``` ```).
+   * marks and running markdown auto-formatting (`# `, `- `, `> `).
    */
   fun onTextChange(id: Long, newValue: TextFieldValue) {
     val index = indexOf(id) ?: return
@@ -106,6 +106,15 @@ class EditorState(initialMarkdown: String = "") {
 
     if (oldText == newText) {
       _blocks[index] = block.copy(value = newValue)
+      return
+    }
+
+    // A soft keyboard's Enter arrives as a newline inside the text rather than as
+    // a key event, so newlines must be split here too. Without this a whole
+    // "paragraph" of visually separate lines stays one block, and styling or
+    // editing any line changes all of them.
+    if (block.type != BlockType.CODE && newText.contains('\n')) {
+      splitOnNewlines(index, block, newValue)
       return
     }
 
@@ -123,6 +132,78 @@ class EditorState(initialMarkdown: String = "") {
 
     _blocks[index] = updated
     revision++
+  }
+
+  /**
+   * Rewrites one block into as many blocks as there are lines in [newValue],
+   * carrying inline marks across and leaving the caret where the user left it.
+   */
+  private fun splitOnNewlines(index: Int, block: Block, newValue: TextFieldValue) {
+    pushHistory()
+
+    val text = newValue.text
+    val caret = newValue.selection.start.coerceIn(0, text.length)
+    val edit = diff(block.text, text)
+    val marks = MarkSpans.remap(block.marks, edit.start, edit.oldEnd, edit.insertedLength, text.length)
+    val segments = text.split("\n")
+
+    // Enter on an empty list item lifts it out of the list instead of splitting.
+    if (block.type.isList && segments.all { it.isEmpty() }) {
+      _blocks[index] = if (block.indent > 0) {
+        block.copy(indent = block.indent - 1).withText("", 0)
+      } else {
+        block.copy(type = BlockType.PARAGRAPH, checked = false).withText("", 0)
+      }
+      revision++
+      focus(block.id)
+      return
+    }
+
+    val continuation = if (block.type.isList) block.type else BlockType.PARAGRAPH
+    val produced = mutableListOf<Block>()
+    var focusId = block.id
+    var focusOffset = 0
+    var offset = 0
+
+    segments.forEachIndexed { position, segment ->
+      val start = offset
+      val end = start + segment.length
+      val sliced = MarkSpans.slice(marks, start, end)
+      val holdsCaret = caret in start..end
+
+      val produced1 = if (position == 0) {
+        // Keep the first block's identity so its text field is not recreated.
+        block.copy(marks = sliced, type = block.type).withText(segment, segment.length)
+      } else {
+        Block.of(
+          type = continuation,
+          text = segment,
+          marks = sliced,
+          indent = if (continuation.isList) block.indent else 0,
+          checked = if (continuation == BlockType.TODO) false else block.checked,
+        )
+      }
+      if (holdsCaret) {
+        focusId = produced1.id
+        focusOffset = caret - start
+      }
+      produced += produced1
+      offset = end + 1 // step over the newline
+    }
+
+    _blocks[index] = produced.first()
+    produced.drop(1).forEachIndexed { i, newBlock ->
+      _blocks.add(index + 1 + i, newBlock)
+    }
+
+    val focusIndex = indexOf(focusId)
+    if (focusIndex != null) {
+      val target = _blocks[focusIndex]
+      _blocks[focusIndex] = target.withText(target.text, focusOffset)
+    }
+    revision++
+    focusedId = focusId
+    focusRequestToken++
   }
 
   /** Splits the focused block at the caret, honouring list continuation. */

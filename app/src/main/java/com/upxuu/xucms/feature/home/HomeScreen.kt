@@ -1,7 +1,6 @@
 package com.upxuu.xucms.feature.home
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,16 +21,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.CloudOff
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -41,11 +36,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,11 +52,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.upxuu.xucms.LocalAppContainer
 import com.upxuu.xucms.data.Draft
 import com.upxuu.xucms.data.NoteKind
@@ -68,12 +64,19 @@ import com.upxuu.xucms.data.NoteSummary
 import com.upxuu.xucms.ui.components.EmptyState
 import com.upxuu.xucms.ui.components.FlatCard
 import com.upxuu.xucms.ui.components.Pill
+import com.upxuu.xucms.ui.components.QuickMetaSheet
 import com.upxuu.xucms.ui.components.SectionLabel
+import com.upxuu.xucms.ui.components.SwipeActionRow
 import com.upxuu.xucms.ui.rememberViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * The list. Right-swipe deletes (with a five-second undo), left-swipe opens the
+ * note's frontmatter. Only never-published drafts get their own section; a
+ * published note with local changes is marked in place instead.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -89,9 +92,13 @@ fun HomeScreen(
   }
   val state by viewModel.state.collectAsState()
   val snackbar = remember { SnackbarHostState() }
-
   var searching by remember { mutableStateOf(false) }
-  var pendingDelete by remember { mutableStateOf<NoteSummary?>(null) }
+
+  // Returning from the editor may have created or cleared drafts.
+  LifecycleResumeEffect(Unit) {
+    viewModel.reloadDrafts()
+    onPauseOrDispose { }
+  }
 
   LaunchedEffect(state.error) {
     state.error?.let {
@@ -99,9 +106,32 @@ fun HomeScreen(
       viewModel.dismissError()
     }
   }
+  LaunchedEffect(state.message) {
+    state.message?.let {
+      snackbar.showSnackbar(it)
+      viewModel.dismissMessage()
+    }
+  }
+
+  // The undo snackbar is the confirmation step: dismissing it commits the delete.
+  LaunchedEffect(state.pendingDelete) {
+    val pending = state.pendingDelete ?: return@LaunchedEffect
+    val result = snackbar.showSnackbar(
+      message = "已删除「${pending.label}」",
+      actionLabel = "撤销",
+      withDismissAction = false,
+      duration = SnackbarDuration.Short,
+    )
+    if (result == SnackbarResult.ActionPerformed) {
+      viewModel.undoDelete()
+    } else {
+      viewModel.commitPendingDelete()
+    }
+  }
 
   Scaffold(
     snackbarHost = { SnackbarHost(snackbar) },
+    containerColor = MaterialTheme.colorScheme.background,
     topBar = {
       CenterAlignedTopAppBar(
         title = {
@@ -112,6 +142,11 @@ fun HomeScreen(
             color = MaterialTheme.colorScheme.primary,
           )
         },
+        navigationIcon = {
+          IconButton(onClick = viewModel::refresh) {
+            Icon(Icons.Outlined.Refresh, contentDescription = "刷新")
+          }
+        },
         actions = {
           IconButton(onClick = { searching = !searching }) {
             Icon(Icons.Outlined.Search, contentDescription = "搜索")
@@ -121,11 +156,6 @@ fun HomeScreen(
           }
           IconButton(onClick = onOpenSettings) {
             Icon(Icons.Outlined.Settings, contentDescription = "设置")
-          }
-        },
-        navigationIcon = {
-          IconButton(onClick = { viewModel.refresh() }) {
-            Icon(Icons.Outlined.Refresh, contentDescription = "刷新")
           }
         },
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -140,10 +170,14 @@ fun HomeScreen(
         contentColor = MaterialTheme.colorScheme.onPrimary,
         shape = RoundedCornerShape(16.dp),
         icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-        text = { Text(if (state.kind == NoteKind.POST) "写文章" else "发说说", fontWeight = FontWeight.SemiBold) },
+        text = {
+          Text(
+            text = if (state.kind == NoteKind.POST) "写文章" else "发说说",
+            fontWeight = FontWeight.SemiBold,
+          )
+        },
       )
     },
-    containerColor = MaterialTheme.colorScheme.background,
   ) { padding ->
     Column(modifier = Modifier.fillMaxSize().padding(padding)) {
       KindTabs(selected = state.kind, onSelect = viewModel::selectKind)
@@ -191,14 +225,16 @@ fun HomeScreen(
         ) {
           if (drafts.isNotEmpty()) {
             item(key = "draft-label") {
-              SectionLabel("未同步草稿", modifier = Modifier.padding(start = 4.dp))
+              SectionLabel("尚未发布", modifier = Modifier.padding(start = 4.dp))
             }
-            items(drafts, key = { it.key }) { draft ->
-              DraftRow(
-                draft = draft,
-                onOpen = { onOpenDraft(draft) },
-                onDiscard = { viewModel.discardDraft(draft) },
-              )
+            items(drafts, key = { it.id }) { draft ->
+              SwipeActionRow(
+                onDelete = { viewModel.requestDelete(draft) },
+                onSettings = { onOpenDraft(draft) },
+                settingsLabel = "继续写",
+              ) {
+                DraftRow(draft = draft, onOpen = { onOpenDraft(draft) })
+              }
             }
             item(key = "cloud-label") {
               SectionLabel("云端内容", modifier = Modifier.padding(start = 4.dp))
@@ -206,11 +242,25 @@ fun HomeScreen(
           }
 
           items(notes, key = { it.name }) { note ->
-            NoteRow(
-              note = note,
-              hasDraft = state.hasDraftFor(note),
-              onOpen = { onOpenNote(state.kind, note) },
-              onDelete = { pendingDelete = note },
+            SwipeActionRow(
+              onDelete = { viewModel.requestDelete(note) },
+              onSettings = { viewModel.openQuickMeta(note) },
+            ) {
+              NoteRow(
+                note = note,
+                hasLocalChanges = state.hasLocalChanges(note),
+                onOpen = { onOpenNote(state.kind, note) },
+              )
+            }
+          }
+
+          item(key = "swipe-hint") {
+            Text(
+              text = "右滑删除，左滑编辑属性",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.outline,
+              textAlign = TextAlign.Center,
+              modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             )
           }
         }
@@ -218,23 +268,18 @@ fun HomeScreen(
     }
   }
 
-  pendingDelete?.let { note ->
-    AlertDialog(
-      onDismissRequest = { pendingDelete = null },
-      title = { Text("删除「${note.displayTitle}」？") },
-      text = { Text("将从云端永久删除这条内容，无法撤销。") },
-      confirmButton = {
-        TextButton(onClick = {
-          viewModel.delete(note)
-          pendingDelete = null
-        }) {
-          Text("删除", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
-        }
-      },
-      dismissButton = {
-        TextButton(onClick = { pendingDelete = null }) { Text("取消") }
-      },
-      shape = MaterialTheme.shapes.large,
+  state.quickMeta?.let { quick ->
+    QuickMetaSheet(
+      kind = quick.kind,
+      title = quick.summary.displayTitle,
+      postMeta = quick.postMeta,
+      talkMeta = quick.talkMeta,
+      loading = quick.loading,
+      saving = quick.saving,
+      onPostChange = viewModel::updateQuickPost,
+      onTalkChange = viewModel::updateQuickTalk,
+      onSave = viewModel::saveQuickMeta,
+      onDismiss = viewModel::closeQuickMeta,
     )
   }
 }
@@ -242,9 +287,7 @@ fun HomeScreen(
 @Composable
 private fun KindTabs(selected: NoteKind, onSelect: (NoteKind) -> Unit) {
   Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = 16.dp, vertical = 6.dp),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
     horizontalArrangement = Arrangement.spacedBy(8.dp),
   ) {
     NoteKind.entries.forEach { kind ->
@@ -252,15 +295,23 @@ private fun KindTabs(selected: NoteKind, onSelect: (NoteKind) -> Unit) {
       Surface(
         shape = RoundedCornerShape(10.dp),
         color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        border = if (active) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = if (active) {
+          null
+        } else {
+          androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        },
         modifier = Modifier.weight(1f).clickable { onSelect(kind) },
       ) {
         Text(
           text = kind.label,
           style = MaterialTheme.typography.labelLarge,
           fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-          color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-          textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+          color = if (active) {
+            MaterialTheme.colorScheme.onPrimary
+          } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+          },
+          textAlign = TextAlign.Center,
           modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         )
       }
@@ -271,62 +322,48 @@ private fun KindTabs(selected: NoteKind, onSelect: (NoteKind) -> Unit) {
 @Composable
 private fun NoteRow(
   note: NoteSummary,
-  hasDraft: Boolean,
+  hasLocalChanges: Boolean,
   onOpen: () -> Unit,
-  onDelete: () -> Unit,
 ) {
   FlatCard(modifier = Modifier.fillMaxWidth(), onClick = onOpen) {
-    Row(
-      modifier = Modifier.padding(start = 16.dp, end = 6.dp, top = 14.dp, bottom = 14.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Column(modifier = Modifier.weight(1f)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Text(
-            text = note.displayTitle,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-          )
-          if (hasDraft) {
-            Spacer(Modifier.width(8.dp))
-            Pill(
-              text = "有本地改动",
-              color = MaterialTheme.colorScheme.onTertiaryContainer,
-              container = MaterialTheme.colorScheme.tertiaryContainer,
-            )
-          }
-        }
-        Spacer(Modifier.height(4.dp))
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-          text = note.date?.let { prettyDate(it) } ?: note.name,
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          text = note.displayTitle,
+          style = MaterialTheme.typography.titleMedium,
+          color = MaterialTheme.colorScheme.onSurface,
+          maxLines = 2,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.weight(1f, fill = false),
         )
+        if (hasLocalChanges) {
+          Spacer(Modifier.width(8.dp))
+          Pill(
+            text = "有本地改动",
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            container = MaterialTheme.colorScheme.tertiaryContainer,
+          )
+        }
       }
-      IconButton(onClick = onDelete) {
-        Icon(
-          Icons.Outlined.Delete,
-          contentDescription = "删除",
-          tint = MaterialTheme.colorScheme.outline,
-          modifier = Modifier.size(19.dp),
-        )
-      }
+      Spacer(Modifier.height(4.dp))
+      Text(
+        text = note.date?.let { prettyDate(it) } ?: note.name,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
     }
   }
 }
 
 @Composable
-private fun DraftRow(draft: Draft, onOpen: () -> Unit, onDiscard: () -> Unit) {
+private fun DraftRow(draft: Draft, onOpen: () -> Unit) {
   FlatCard(
     modifier = Modifier.fillMaxWidth(),
     onClick = onOpen,
     color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
   ) {
     Row(
-      modifier = Modifier.padding(start = 16.dp, end = 6.dp, top = 14.dp, bottom = 14.dp),
+      modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Icon(
@@ -338,7 +375,7 @@ private fun DraftRow(draft: Draft, onOpen: () -> Unit, onDiscard: () -> Unit) {
       Spacer(Modifier.width(12.dp))
       Column(modifier = Modifier.weight(1f)) {
         Text(
-          text = draftTitle(draft),
+          text = draftTitleOf(draft),
           style = MaterialTheme.typography.titleMedium,
           color = MaterialTheme.colorScheme.onSurface,
           maxLines = 1,
@@ -351,31 +388,8 @@ private fun DraftRow(draft: Draft, onOpen: () -> Unit, onDiscard: () -> Unit) {
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
       }
-      IconButton(onClick = onDiscard) {
-        Icon(
-          Icons.Outlined.CloudOff,
-          contentDescription = "丢弃草稿",
-          tint = MaterialTheme.colorScheme.outline,
-          modifier = Modifier.size(18.dp),
-        )
-      }
     }
   }
-}
-
-private fun draftTitle(draft: Draft): String {
-  val fromFrontmatter = Regex("^title:\\s*(.+)$", RegexOption.MULTILINE)
-    .find(draft.markdown)
-    ?.groupValues
-    ?.getOrNull(1)
-    ?.trim()
-    ?.trim('"', '\'')
-  if (!fromFrontmatter.isNullOrBlank()) return fromFrontmatter
-  draft.filename?.let { return it.removeSuffix(".md") }
-  val firstLine = draft.markdown.lineSequence()
-    .map { it.trim() }
-    .firstOrNull { it.isNotEmpty() && !it.startsWith("---") && !it.contains(": ") }
-  return firstLine?.take(40)?.trimStart('#', ' ') ?: "未命名草稿"
 }
 
 private fun prettyDate(raw: String): String = raw.replace('T', ' ').take(16)

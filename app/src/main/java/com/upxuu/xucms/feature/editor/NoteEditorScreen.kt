@@ -3,7 +3,6 @@ package com.upxuu.xucms.feature.editor
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,7 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.HistoryEdu
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,8 +26,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -59,8 +60,8 @@ import com.upxuu.xucms.ui.components.ThinDivider
 import com.upxuu.xucms.ui.rememberViewModel
 
 /**
- * The writing screen: a title line, the block editor, and one toolbar. Metadata and
- * the gallery are one tap away in sheets so they never compete with the text.
+ * The writing screen: a title line, the block editor, and one toolbar. Metadata,
+ * drafts and the gallery live in sheets so they never compete with the text.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,6 +82,7 @@ fun NoteEditorScreen(
   val snackbar = remember { SnackbarHostState() }
 
   var showMeta by remember { mutableStateOf(false) }
+  var showDrafts by remember { mutableStateOf(false) }
   var showGallery by remember { mutableStateOf(false) }
   var showLink by remember { mutableStateOf(false) }
 
@@ -88,11 +90,10 @@ fun NoteEditorScreen(
     ActivityResultContracts.GetMultipleContents(),
   ) { uris -> viewModel.uploadImages(context, uris) }
 
-  // Any content edit marks the document dirty and (re)arms the autosave timer.
+  // Every content edit re-evaluates whether the document really differs from the
+  // loaded baseline; the ViewModel decides whether that warrants a draft.
   LaunchedEffect(editor) {
-    snapshotFlow { editor.revision }.collect { revision ->
-      if (revision > 0) viewModel.onContentChanged()
-    }
+    snapshotFlow { editor.revision }.collect { viewModel.onContentChanged() }
   }
 
   LaunchedEffect(state.message) {
@@ -114,6 +115,21 @@ fun NoteEditorScreen(
     if (state.finished) onBack()
   }
 
+  // Dismissing the snackbar is what actually deletes the draft.
+  LaunchedEffect(state.pendingDraftDelete) {
+    val pending = state.pendingDraftDelete ?: return@LaunchedEffect
+    val result = snackbar.showSnackbar(
+      message = "已删除该草稿",
+      actionLabel = "撤销",
+      duration = SnackbarDuration.Short,
+    )
+    if (result == SnackbarResult.ActionPerformed) {
+      viewModel.undoDraftDelete()
+    } else {
+      viewModel.commitPendingDraftDelete()
+    }
+  }
+
   Scaffold(
     snackbarHost = { SnackbarHost(snackbar) },
     containerColor = MaterialTheme.colorScheme.background,
@@ -127,7 +143,7 @@ fun NoteEditorScreen(
         },
         navigationIcon = {
           IconButton(onClick = {
-            viewModel.persistDraft()
+            viewModel.persistDraft(announce = false)
             onBack()
           }) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -140,7 +156,10 @@ fun NoteEditorScreen(
               color = MaterialTheme.colorScheme.onTertiaryContainer,
               container = MaterialTheme.colorScheme.tertiaryContainer,
             )
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(4.dp))
+          }
+          IconButton(onClick = { showDrafts = true }) {
+            Icon(Icons.Outlined.HistoryEdu, contentDescription = "草稿管理")
           }
           IconButton(onClick = { showMeta = true }) {
             Icon(Icons.Outlined.Tune, contentDescription = "属性")
@@ -196,7 +215,9 @@ fun NoteEditorScreen(
       AnimatedVisibility(visible = state.restoredDraft) {
         Surface(color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)) {
           Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
           ) {
             Text(
@@ -205,16 +226,17 @@ fun NoteEditorScreen(
               color = MaterialTheme.colorScheme.onSurface,
               modifier = Modifier.weight(1f),
             )
+            TextButton(onClick = { showDrafts = true }) { Text("查看草稿") }
             TextButton(onClick = viewModel::dismissRestoredBanner) { Text("知道了") }
           }
         }
       }
 
-      TitleField(state = state, onPostTitle = { value ->
-        viewModel.updatePost { it.copy(title = value) }
-      }, onTalkTitle = { value ->
-        viewModel.updateTalk { it.copy(title = value) }
-      })
+      TitleField(
+        state = state,
+        onPostTitle = { value -> viewModel.updatePost { it.copy(title = value) } },
+        onTalkTitle = { value -> viewModel.updateTalk { it.copy(title = value) } },
+      )
 
       Text(
         text = state.targetFilename(),
@@ -244,6 +266,19 @@ fun NoteEditorScreen(
     )
   }
 
+  if (showDrafts) {
+    DraftSheet(
+      drafts = state.visibleDrafts,
+      onDismiss = { showDrafts = false },
+      onCreateSnapshot = viewModel::createManualDraft,
+      onRestore = { draft ->
+        viewModel.restoreDraft(draft)
+        showDrafts = false
+      },
+      onDelete = viewModel::requestDraftDelete,
+    )
+  }
+
   if (showGallery) {
     GalleryPickerSheet(
       onDismiss = { showGallery = false },
@@ -263,12 +298,10 @@ fun NoteEditorScreen(
       onDismiss = { showLink = false },
       onApply = { href ->
         editor.toggleInline(InlineMark.LINK, href)
-        viewModel.onContentChanged()
         showLink = false
       },
       onRemove = {
         editor.toggleInline(InlineMark.LINK)
-        viewModel.onContentChanged()
         showLink = false
       },
     )

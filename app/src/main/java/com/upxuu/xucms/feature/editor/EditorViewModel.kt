@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.upxuu.xucms.data.ApiException
+import com.upxuu.xucms.data.Draft
 import com.upxuu.xucms.data.DraftStore
 import com.upxuu.xucms.data.ImagePipeline
 import com.upxuu.xucms.data.NoteCodec
@@ -21,8 +22,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-enum class SaveStage { IDLE, DRAFT_SAVED, SAVING, SAVED, FAILED }
+enum class SaveStage { IDLE, SAVING, SAVED, FAILED }
 
 data class EditorUiState(
   val kind: NoteKind = NoteKind.POST,
@@ -38,12 +42,17 @@ data class EditorUiState(
   val uploading: Pair<Int, Int>? = null,
   val restoredDraft: Boolean = false,
   val dirty: Boolean = false,
+  val drafts: List<Draft> = emptyList(),
+  val pendingDraftDelete: Draft? = null,
   val sessionExpired: Boolean = false,
   val finished: Boolean = false,
 ) {
   val isNew: Boolean get() = filename == null
 
   val title: String get() = if (kind == NoteKind.POST) postMeta.title else talkMeta.title
+
+  val visibleDrafts: List<Draft>
+    get() = drafts.filter { it.id != pendingDraftDelete?.id }
 
   /** Filename that will actually be written, shown live under the title field. */
   fun targetFilename(): String {
@@ -73,6 +82,13 @@ class EditorViewModel(
   val state: StateFlow<EditorUiState> = _state.asStateFlow()
 
   private var autosaveJob: Job? = null
+  private var undoJob: Job? = null
+
+  /**
+   * Markdown as it was when the document was opened. Autosave compares against
+   * this, so opening a note and leaving without typing creates no draft.
+   */
+  private var baseline: String = ""
 
   init {
     load()
@@ -82,12 +98,19 @@ class EditorViewModel(
 
   private fun load() {
     viewModelScope.launch {
-      val localDraft = drafts.load(kind, filename)
+      val localDraft = drafts.latestFor(kind, filename)
 
       if (filename == null) {
-        applyMarkdown(localDraft?.markdown ?: defaultTemplate())
+        val source = localDraft?.markdown ?: defaultTemplate()
+        applyMarkdown(source)
+        baseline = if (localDraft != null) source else composeMarkdown()
         _state.update {
-          it.copy(loading = false, restoredDraft = localDraft != null, sha = localDraft?.sha)
+          it.copy(
+            loading = false,
+            restoredDraft = localDraft != null,
+            sha = localDraft?.sha,
+            drafts = drafts.forNote(kind, null),
+          )
         }
         return@launch
       }
@@ -98,28 +121,34 @@ class EditorViewModel(
         val expired = (failure as? ApiException)?.code?.let { it == 401 || it == 403 } == true
         if (expired) settings.signOut()
         // Fall back to the local draft so offline editing still works.
-        applyMarkdown(localDraft?.markdown ?: defaultTemplate())
+        val source = localDraft?.markdown ?: defaultTemplate()
+        applyMarkdown(source)
+        baseline = source
         _state.update {
           it.copy(
             loading = false,
             error = if (expired) null else failure?.message,
             sessionExpired = expired,
             restoredDraft = localDraft != null,
+            drafts = drafts.forNote(kind, filename),
           )
         }
         return@launch
       }
 
       val content = remote.getOrThrow()
-      // A draft newer than the remote copy wins; the user's unsaved typing is
-      // more valuable than a re-fetch of what they already had.
-      val useDraft = localDraft != null && localDraft.markdown != content.content
-      applyMarkdown(if (useDraft) localDraft!!.markdown else content.content)
+      // A draft that differs from the server copy wins: unsaved typing is worth
+      // more than re-fetching what the user already had.
+      val useDraft = localDraft != null && localDraft.markdown.trim() != content.content.trim()
+      val source = if (useDraft) localDraft!!.markdown else content.content
+      applyMarkdown(source)
+      baseline = content.content
       _state.update {
         it.copy(
           loading = false,
           sha = content.sha,
           restoredDraft = useDraft,
+          drafts = drafts.forNote(kind, filename),
         )
       }
     }
@@ -161,43 +190,101 @@ class EditorViewModel(
     NoteKind.TALK -> NoteCodec.buildTalk(_state.value.talkMeta, editor.toMarkdown())
   }
 
+  /** True when the document actually differs from what was loaded. */
+  private fun hasRealChanges(): Boolean = composeMarkdown().trim() != baseline.trim()
+
   fun updatePost(transform: (PostMeta) -> PostMeta) {
-    _state.update { it.copy(postMeta = transform(it.postMeta), dirty = true) }
-    scheduleAutosave()
+    _state.update { it.copy(postMeta = transform(it.postMeta)) }
+    onContentChanged()
   }
 
   fun updateTalk(transform: (TalkMeta) -> TalkMeta) {
-    _state.update { it.copy(talkMeta = transform(it.talkMeta), dirty = true) }
-    scheduleAutosave()
+    _state.update { it.copy(talkMeta = transform(it.talkMeta)) }
+    onContentChanged()
   }
 
   fun setCustomFilename(value: String) {
-    _state.update { it.copy(customFilename = value, dirty = true) }
-    scheduleAutosave()
+    _state.update { it.copy(customFilename = value) }
+    onContentChanged()
   }
 
-  /** Called whenever the editor content changes; debounces a local draft write. */
+  /** Called on every content change; only arms autosave if something really changed. */
   fun onContentChanged() {
-    _state.update { it.copy(dirty = true) }
-    scheduleAutosave()
-  }
-
-  private fun scheduleAutosave() {
+    val changed = hasRealChanges()
+    _state.update { if (it.dirty == changed) it else it.copy(dirty = changed) }
+    if (!changed) {
+      autosaveJob?.cancel()
+      return
+    }
     val seconds = settings.autosaveSeconds
     if (seconds <= 0) return
     autosaveJob?.cancel()
     autosaveJob = viewModelScope.launch {
       delay(seconds * 1000L)
-      persistDraft()
+      persistDraft(announce = false)
     }
   }
 
-  /** Writes the current content to the local draft store. Cheap and synchronous. */
-  fun persistDraft() {
+  /** Writes the autosave slot, replacing whatever was there. No-op when unchanged. */
+  fun persistDraft(announce: Boolean = true) {
+    if (!hasRealChanges()) return
     val current = _state.value
-    if (editor.isBlank && current.title.isBlank()) return
-    drafts.save(kind, current.filename, current.sha, composeMarkdown())
-    _state.update { it.copy(stage = SaveStage.DRAFT_SAVED, message = "已保存本地草稿") }
+    drafts.saveAuto(kind, current.filename, current.sha, composeMarkdown())
+    _state.update {
+      it.copy(
+        drafts = drafts.forNote(kind, current.filename),
+        message = if (announce) "已保存草稿" else it.message,
+      )
+    }
+  }
+
+  /** User-created snapshot; unlike the autosave slot these accumulate. */
+  fun createManualDraft() {
+    val current = _state.value
+    val label = "手动草稿 ${SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date())}"
+    drafts.saveManual(kind, current.filename, current.sha, composeMarkdown(), label)
+    _state.update {
+      it.copy(drafts = drafts.forNote(kind, current.filename), message = "已创建草稿快照")
+    }
+  }
+
+  fun restoreDraft(draft: Draft) {
+    applyMarkdown(draft.markdown)
+    _state.update { it.copy(message = "已载入该草稿", dirty = hasRealChanges()) }
+  }
+
+  // -------------------------------------------------- draft delete with undo
+
+  fun requestDraftDelete(draft: Draft) {
+    undoJob?.cancel()
+    _state.value.pendingDraftDelete?.let { commitDraftDelete(it) }
+    _state.update { it.copy(pendingDraftDelete = draft) }
+    undoJob = viewModelScope.launch {
+      delay(UNDO_WINDOW_MILLIS)
+      commitDraftDelete(draft)
+    }
+  }
+
+  fun undoDraftDelete() {
+    undoJob?.cancel()
+    undoJob = null
+    _state.update { it.copy(pendingDraftDelete = null) }
+  }
+
+  fun commitPendingDraftDelete() {
+    undoJob?.cancel()
+    undoJob = null
+    _state.value.pendingDraftDelete?.let { commitDraftDelete(it) }
+  }
+
+  private fun commitDraftDelete(draft: Draft) {
+    drafts.delete(draft.id)
+    _state.update { current ->
+      current.copy(
+        pendingDraftDelete = if (current.pendingDraftDelete?.id == draft.id) null else current.pendingDraftDelete,
+        drafts = drafts.forNote(kind, current.filename),
+      )
+    }
   }
 
   // -------------------------------------------------------------------- save
@@ -219,13 +306,16 @@ class EditorViewModel(
 
     viewModelScope.launch {
       _state.update { it.copy(stage = SaveStage.SAVING, error = null) }
-      // Keep a draft while the request is in flight so a crash mid-save is safe.
-      drafts.save(kind, current.filename, current.sha, payload)
+      // Keep an autosave while the request is in flight so a crash mid-save is safe.
+      drafts.saveAuto(kind, current.filename, current.sha, payload)
 
       val result = api.save(kind, target, payload, current.sha)
       if (result.isSuccess) {
-        drafts.clear(kind, current.filename)
-        drafts.clear(kind, target)
+        // Published: the autosave slot is obsolete. Manual snapshots are kept —
+        // the user made those on purpose.
+        drafts.delete(drafts.autoId(kind, current.filename))
+        drafts.delete(drafts.autoId(kind, target))
+        baseline = payload
         _state.update {
           it.copy(
             stage = SaveStage.SAVED,
@@ -245,6 +335,7 @@ class EditorViewModel(
             stage = SaveStage.FAILED,
             error = if (expired) null else (failure?.message ?: "保存失败，草稿已留在本地"),
             sessionExpired = expired,
+            drafts = drafts.forNote(kind, current.filename),
           )
         }
       }
@@ -292,25 +383,19 @@ class EditorViewModel(
     onContentChanged()
   }
 
-  fun dismissMessage() {
-    _state.update { it.copy(message = null) }
-  }
+  fun dismissMessage() = _state.update { it.copy(message = null) }
 
-  fun dismissError() {
-    _state.update { it.copy(error = null) }
-  }
+  fun dismissError() = _state.update { it.copy(error = null) }
 
-  fun dismissRestoredBanner() {
-    _state.update { it.copy(restoredDraft = false) }
-  }
-
-  fun discardLocalDraft() {
-    drafts.clear(kind, _state.value.filename)
-    _state.update { it.copy(restoredDraft = false, message = "已丢弃本地草稿") }
-  }
+  fun dismissRestoredBanner() = _state.update { it.copy(restoredDraft = false) }
 
   override fun onCleared() {
     super.onCleared()
     autosaveJob?.cancel()
+    undoJob?.cancel()
+  }
+
+  companion object {
+    const val UNDO_WINDOW_MILLIS = 5_000L
   }
 }

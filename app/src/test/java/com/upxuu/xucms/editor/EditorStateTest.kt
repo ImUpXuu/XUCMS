@@ -86,6 +86,40 @@ class EditorStateTest {
   }
 
   @Test
+  fun `a newline arriving from the keyboard splits the block`() {
+    // Soft keyboards deliver Enter as text, not as a key event.
+    val state = EditorState("hello world")
+    val block = state.blocks[0]
+    state.focus(block.id)
+    state.onTextChange(block.id, TextFieldValue("hello\n world", TextRange(6)))
+    assertEquals(2, state.blocks.size)
+    assertEquals("hello", state.blocks[0].text)
+    assertEquals(" world", state.blocks[1].text)
+  }
+
+  @Test
+  fun `pasting several lines produces one block per line`() {
+    val state = EditorState("")
+    val block = state.blocks[0]
+    state.focus(block.id)
+    state.onTextChange(block.id, TextFieldValue("a\nb\nc", TextRange(5)))
+    assertEquals(3, state.blocks.size)
+    assertEquals(listOf("a", "b", "c"), state.blocks.map { it.text })
+  }
+
+  @Test
+  fun `styling one line leaves its neighbours untouched`() {
+    val state = EditorState("first line\n\nsecond line")
+    assertEquals(2, state.blocks.size)
+    val first = state.blocks[0]
+    state.focus(first.id)
+    state.setBlockType(BlockType.H1)
+    assertEquals(BlockType.H1, state.blocks[0].type)
+    assertEquals(BlockType.PARAGRAPH, state.blocks[1].type)
+    assertEquals("second line", state.blocks[1].text)
+  }
+
+  @Test
   fun `toggling bold over a selection marks that range`() {
     val state = EditorState("hello world")
     val block = state.blocks[0]

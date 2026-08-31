@@ -5,15 +5,40 @@ import androidx.lifecycle.viewModelScope
 import com.upxuu.xucms.data.ApiException
 import com.upxuu.xucms.data.Draft
 import com.upxuu.xucms.data.DraftStore
+import com.upxuu.xucms.data.NoteCodec
 import com.upxuu.xucms.data.NoteKind
 import com.upxuu.xucms.data.NoteSummary
+import com.upxuu.xucms.data.PostMeta
 import com.upxuu.xucms.data.SettingsStore
+import com.upxuu.xucms.data.TalkMeta
 import com.upxuu.xucms.data.XucmsApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/** A delete waiting out its undo window; nothing has been removed yet. */
+data class PendingDelete(
+  val note: NoteSummary? = null,
+  val draft: Draft? = null,
+) {
+  val label: String get() = note?.displayTitle ?: draft?.let { draftTitleOf(it) } ?: ""
+}
+
+/** Metadata of one note, loaded on demand for the quick-edit sheet. */
+data class QuickMeta(
+  val summary: NoteSummary,
+  val kind: NoteKind,
+  val postMeta: PostMeta = PostMeta(),
+  val talkMeta: TalkMeta = TalkMeta(),
+  val body: String = "",
+  val sha: String? = null,
+  val loading: Boolean = true,
+  val saving: Boolean = false,
+)
 
 data class HomeUiState(
   val kind: NoteKind = NoteKind.POST,
@@ -21,28 +46,38 @@ data class HomeUiState(
   val query: String = "",
   val posts: List<NoteSummary> = emptyList(),
   val talks: List<NoteSummary> = emptyList(),
-  val drafts: List<Draft> = emptyList(),
+  /** Only drafts of notes that were never published; published notes get a pill. */
+  val unpublishedDrafts: List<Draft> = emptyList(),
+  val filenamesWithChanges: Set<String> = emptySet(),
+  val pendingDelete: PendingDelete? = null,
+  val quickMeta: QuickMeta? = null,
   val error: String? = null,
+  val message: String? = null,
   val sessionExpired: Boolean = false,
 ) {
   private val current: List<NoteSummary> get() = if (kind == NoteKind.POST) posts else talks
 
-  /** Notes matching the search box, newest first. */
   val visibleNotes: List<NoteSummary>
     get() {
       val needle = query.trim()
-      val filtered = if (needle.isEmpty()) current else current.filter {
-        it.displayTitle.contains(needle, ignoreCase = true) || it.name.contains(needle, ignoreCase = true)
-      }
+      val hiddenName = pendingDelete?.note?.name
+      val filtered = current
+        .filter { it.name != hiddenName }
+        .filter {
+          needle.isEmpty() ||
+            it.displayTitle.contains(needle, ignoreCase = true) ||
+            it.name.contains(needle, ignoreCase = true)
+        }
       return filtered.sortedByDescending { it.date ?: it.name }
     }
 
-  /** Unsynced drafts for the selected tab, so the user can resume anything. */
   val visibleDrafts: List<Draft>
-    get() = drafts.filter { it.noteKind == kind }
+    get() {
+      val hiddenId = pendingDelete?.draft?.id
+      return unpublishedDrafts.filter { it.noteKind == kind && it.id != hiddenId }
+    }
 
-  fun hasDraftFor(summary: NoteSummary): Boolean =
-    drafts.any { it.noteKind == kind && it.filename == summary.name }
+  fun hasLocalChanges(summary: NoteSummary): Boolean = summary.name in filenamesWithChanges
 }
 
 class HomeViewModel(
@@ -54,39 +89,36 @@ class HomeViewModel(
   private val _state = MutableStateFlow(HomeUiState())
   val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
+  private var undoJob: Job? = null
+
   init {
     refresh()
   }
 
   fun selectKind(kind: NoteKind) {
     _state.update { it.copy(kind = kind) }
-    if (loadedFor(kind).isEmpty()) refresh()
   }
 
-  private fun loadedFor(kind: NoteKind): List<NoteSummary> =
-    if (kind == NoteKind.POST) _state.value.posts else _state.value.talks
-
-  fun setQuery(value: String) {
-    _state.update { it.copy(query = value) }
-  }
+  fun setQuery(value: String) = _state.update { it.copy(query = value) }
 
   fun refresh() {
     viewModelScope.launch {
       _state.update { it.copy(loading = true, error = null) }
-      val drafts = draftStore.all()
       val posts = api.list(NoteKind.POST)
       val talks = api.list(NoteKind.TALK)
 
       val failure = posts.exceptionOrNull() ?: talks.exceptionOrNull()
       val expired = (failure as? ApiException)?.code?.let { it == 401 || it == 403 } == true
 
-      _state.update {
-        it.copy(
+      _state.update { current ->
+        current.copy(
           loading = false,
-          drafts = drafts,
-          posts = posts.getOrElse { _ -> it.posts },
-          talks = talks.getOrElse { _ -> it.talks },
-          error = failure?.message.takeIf { _ -> !expired },
+          posts = posts.getOrElse { current.posts },
+          talks = talks.getOrElse { current.talks },
+          unpublishedDrafts = draftStore.unpublished(),
+          filenamesWithChanges = draftStore.filenamesWithLocalChanges(NoteKind.POST) +
+            draftStore.filenamesWithLocalChanges(NoteKind.TALK),
+          error = failure?.message.takeIf { !expired },
           sessionExpired = expired,
         )
       }
@@ -94,28 +126,165 @@ class HomeViewModel(
     }
   }
 
-  fun delete(summary: NoteSummary) {
+  fun reloadDrafts() {
+    _state.update {
+      it.copy(
+        unpublishedDrafts = draftStore.unpublished(),
+        filenamesWithChanges = draftStore.filenamesWithLocalChanges(NoteKind.POST) +
+          draftStore.filenamesWithLocalChanges(NoteKind.TALK),
+      )
+    }
+  }
+
+  // ------------------------------------------------------- delete with undo
+
+  /**
+   * Hides the row and starts a five-second window. Nothing is deleted until the
+   * window closes, so a swipe by accident costs the user nothing.
+   */
+  fun requestDelete(note: NoteSummary) = startUndoWindow(PendingDelete(note = note))
+
+  fun requestDelete(draft: Draft) = startUndoWindow(PendingDelete(draft = draft))
+
+  private fun startUndoWindow(pending: PendingDelete) {
+    // Commit whatever is already waiting; only one row can be pending at a time.
+    undoJob?.cancel()
+    _state.value.pendingDelete?.let { commit(it) }
+
+    _state.update { it.copy(pendingDelete = pending) }
+    undoJob = viewModelScope.launch {
+      delay(UNDO_WINDOW_MILLIS)
+      commit(pending)
+    }
+  }
+
+  fun undoDelete() {
+    undoJob?.cancel()
+    undoJob = null
+    _state.update { it.copy(pendingDelete = null) }
+  }
+
+  /** Deletes now instead of waiting, used when the snackbar is dismissed. */
+  fun commitPendingDelete() {
+    undoJob?.cancel()
+    undoJob = null
+    _state.value.pendingDelete?.let { commit(it) }
+  }
+
+  private fun commit(pending: PendingDelete) {
     val kind = _state.value.kind
+    _state.update { if (it.pendingDelete == pending) it.copy(pendingDelete = null) else it }
+
+    pending.draft?.let { draft ->
+      draftStore.delete(draft.id)
+      reloadDrafts()
+      return
+    }
+
+    val note = pending.note ?: return
     viewModelScope.launch {
-      _state.update { it.copy(loading = true) }
-      val result = api.delete(kind, summary.name, summary.sha)
+      val result = api.delete(kind, note.name, note.sha)
       if (result.isSuccess) {
-        draftStore.clear(kind, summary.name)
+        draftStore.deleteAllFor(kind, note.name)
         refresh()
       } else {
         _state.update {
-          it.copy(loading = false, error = result.exceptionOrNull()?.message ?: "删除失败")
+          it.copy(error = result.exceptionOrNull()?.message ?: "删除失败，内容已保留")
+        }
+        refresh()
+      }
+    }
+  }
+
+  // ------------------------------------------------------------ quick meta
+
+  /** Loads just enough of a note to edit its frontmatter without opening the editor. */
+  fun openQuickMeta(note: NoteSummary) {
+    val kind = _state.value.kind
+    _state.update { it.copy(quickMeta = QuickMeta(summary = note, kind = kind)) }
+    viewModelScope.launch {
+      val result = api.load(kind, note.name)
+      if (result.isFailure) {
+        _state.update {
+          it.copy(quickMeta = null, error = result.exceptionOrNull()?.message ?: "无法读取内容")
+        }
+        return@launch
+      }
+      val content = result.getOrThrow()
+      _state.update { current ->
+        val quick = current.quickMeta ?: return@update current
+        when (kind) {
+          NoteKind.POST -> {
+            val (meta, body) = NoteCodec.parsePost(content.content)
+            current.copy(quickMeta = quick.copy(postMeta = meta, body = body, sha = content.sha, loading = false))
+          }
+          NoteKind.TALK -> {
+            val (meta, body) = NoteCodec.parseTalk(content.content)
+            current.copy(quickMeta = quick.copy(talkMeta = meta, body = body, sha = content.sha, loading = false))
+          }
         }
       }
     }
   }
 
-  fun discardDraft(draft: Draft) {
-    draftStore.clear(draft.key)
-    _state.update { current -> current.copy(drafts = current.drafts.filterNot { it.key == draft.key }) }
+  fun updateQuickPost(transform: (PostMeta) -> PostMeta) = _state.update { current ->
+    val quick = current.quickMeta ?: return@update current
+    current.copy(quickMeta = quick.copy(postMeta = transform(quick.postMeta)))
   }
 
-  fun dismissError() {
-    _state.update { it.copy(error = null) }
+  fun updateQuickTalk(transform: (TalkMeta) -> TalkMeta) = _state.update { current ->
+    val quick = current.quickMeta ?: return@update current
+    current.copy(quickMeta = quick.copy(talkMeta = transform(quick.talkMeta)))
   }
+
+  fun closeQuickMeta() = _state.update { it.copy(quickMeta = null) }
+
+  fun saveQuickMeta() {
+    val quick = _state.value.quickMeta ?: return
+    viewModelScope.launch {
+      _state.update { current ->
+        current.copy(quickMeta = current.quickMeta?.copy(saving = true))
+      }
+      val payload = when (quick.kind) {
+        NoteKind.POST -> NoteCodec.buildPost(quick.postMeta, quick.body)
+        NoteKind.TALK -> NoteCodec.buildTalk(quick.talkMeta, quick.body)
+      }
+      val result = api.save(quick.kind, quick.summary.name, payload, quick.sha)
+      if (result.isSuccess) {
+        _state.update { it.copy(quickMeta = null, message = "属性已更新") }
+        refresh()
+      } else {
+        _state.update { current ->
+          current.copy(
+            quickMeta = current.quickMeta?.copy(saving = false),
+            error = result.exceptionOrNull()?.message ?: "保存失败",
+          )
+        }
+      }
+    }
+  }
+
+  fun dismissError() = _state.update { it.copy(error = null) }
+
+  fun dismissMessage() = _state.update { it.copy(message = null) }
+
+  companion object {
+    const val UNDO_WINDOW_MILLIS = 5_000L
+  }
+}
+
+/** Best-effort display name for a draft that has no remote filename yet. */
+fun draftTitleOf(draft: Draft): String {
+  if (draft.label.isNotBlank()) return draft.label
+  Regex("^title:\\s*(.+)$", RegexOption.MULTILINE).find(draft.markdown)
+    ?.groupValues?.getOrNull(1)
+    ?.trim()
+    ?.trim('"', '\'')
+    ?.takeIf { it.isNotBlank() }
+    ?.let { return it }
+  draft.filename?.let { return it.removeSuffix(".md") }
+  val firstLine = draft.markdown.lineSequence()
+    .map { it.trim() }
+    .firstOrNull { it.isNotEmpty() && !it.startsWith("---") && !it.contains(": ") }
+  return firstLine?.trimStart('#', ' ')?.take(40) ?: "未命名草稿"
 }
