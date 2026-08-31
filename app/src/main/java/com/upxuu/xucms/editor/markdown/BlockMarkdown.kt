@@ -202,8 +202,10 @@ object BlockMarkdown {
     val checked: Boolean,
   )
 
-  private val orderedRegex = Regex("^(\\s*)(\\d+)[.)]\\s+(.*)$")
-  private val bulletRegex = Regex("^(\\s*)([-*+])\\s+(.*)$")
+  // A marker with no content is still a list item, which is how an empty row
+  // written by the editor survives a save/load cycle.
+  private val orderedRegex = Regex("^(\\s*)(\\d+)[.)](?:[ \\t]+(.*))?$")
+  private val bulletRegex = Regex("^(\\s*)([-*+])(?:[ \\t]+(.*))?$")
 
   private fun parseListItem(line: String): ListItem? {
     bulletRegex.matchEntire(line)?.let { m ->

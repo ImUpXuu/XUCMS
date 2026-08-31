@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -212,6 +214,7 @@ private fun QuoteBlock(state: EditorState, block: Block, showPlaceholder: String
   Row(
     modifier = Modifier
       .fillMaxWidth()
+      .height(IntrinsicSize.Min)
       .padding(vertical = 6.dp)
       .clip(RoundedCornerShape(4.dp))
       .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
@@ -219,7 +222,7 @@ private fun QuoteBlock(state: EditorState, block: Block, showPlaceholder: String
     Box(
       modifier = Modifier
         .width(3.dp)
-        .height(if (block.text.isEmpty()) 28.dp else (block.text.count { it == '\n' } + 1) * 28.dp)
+        .fillMaxHeight()
         .background(MaterialTheme.colorScheme.primary),
     )
     BlockField(
