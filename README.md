@@ -1,72 +1,70 @@
-# XUCMS — 高性能博客与说说客户端
+# XUCMS
 
-XUCMS 是一款为自建或托管 CMS 设计的精美 Android 客户端。在保障全平台自适应排版的前提下，旨在为您提供最纯粹的随时随地创作、编辑文章及说说（动态）的全新体验。
+极简的云端记事客户端。手机上随手写，一键同步到自建 CMS。
 
-> [!NOTE]
-> 本客户端配套的自部署后端：[blog-admin-workers](https://github.com/ImUpXuu/blog-admin-workers)，可一键部署在 **Cloudflare Workers** 轻量化无服务器边缘计算平台上，提供极其安全、快速、廉价（每天 10 万次免费调用）的 API 支持。
+编辑器是本项目自己写的——没有 WebView，没有第三方富文本库。段落、标题、列表、引用、代码块直接以最终样式渲染在可编辑区域里，`**` `##` `- ` 这些标记不会留在屏幕上。
 
----
-
-## ✨ 核心特性
-
-### 1. 📂 强大的文章编辑与发布管理
-- **自定义文章文件名**：支持直接配置 `.md` 文件的名称，系统将智能剔除冗余后缀并保持文件名统一规范，不再依赖标题拼音/英文自动转换。
-- **全新升级的 Markdown 排版工具栏**：
-  - **H1 - H3 / P 段落一键定制**：支持下拉选择框（Dropdown Menu）选取包含“H1 大标题”、“H2 中标题”、“H3 小标题”和“P 正文”在内的段落样式样式。
-  - **分割线扩展**：新增一键插入标准的 Markdown 分割线 `---` 块，为排版带来极致的段落纵深感。
-  - **快捷样式**：支持粗体（Bold）、斜体（Italic）、下划线（Underline）、无序列表（UL）级有序列表（OL）的无缝切换。
-
-### 2. 💾 30s 极速云/本地草稿自动保存与防崩溃恢复
-- **秒级自动保存**：编辑区会自动开启一个 30s 的周期后台保存任务，发生任何突发故障都能确保本地/Room 数据万无一失。
-- **灾后数据恢复**：应用崩溃或后台进程被清理后，再次进入编辑页时，气泡/弹窗会及时检测最近一次的草稿快照，提供“恢复历史草稿”机制。
-- **缓存标签醒目提示**：文章或者说说在未成功投递/发布，抑或是本地有更新快照时，在列表页面会对对应的记录打上醒目的 **[缓存]** 的彩色微章（Badge），随时提示修改现状。
-
-### 3. 🌐 自定义多源登录端点支持
-- **去中心化配置**：登录页不再硬编码限制 `edit.upxuu.com`，您可以在登录页面自定义 Base URL 协议与主机号。
-- **多账号无缝漫游**：可自主适配基于同类 API 设计的所有多级 CMS 服务系统。
-
-### 4. 🎨 极简 Material Design 3 视觉盛宴
-- **自适应系统图标**：配备了特别为 XUCMS 优雅提炼的 2D 矢量微章应用图标。暗黑夜空深蓝色主题，带来充满质感的交互视觉。
-- **全新层级化设置中心**：
-  - **外观设置**：点击外观设置弹出优美的对话框，支持“跟随系统”、“浅色模式”、“深色模式”无感平滑切换。
-  - **登录设置**：精细化管理的 API 与 Token 查看及变更入口。
-  - **关于软件**：展示精简的版本号、版权声明以及专业的应用内隔离存储隐私条款。
-
-### 5. 🚀 自动化 GitHub Actions 持续构建发布 (CI/CD)
-- 已经构建了标准的 `/.github/workflows/release.yml` 自动化发布脚本。
-- **一键构建生产包**：当向仓库推送类似 `v1.0.0` 的版本标签时，GitHub 容器会自动拉起 JDK 17 及 Gradle 系统编译 Release APK。
-- **自动挂载 Release**：构建成功后的 APK 包会自动上传到 GitHub Releases 中供直接下载安装。
+> 配套后端：[blog-admin-workers](https://github.com/ImUpXuu/blog-admin-workers)，部署在 Cloudflare Workers 上。也可以在登录页填写任何兼容该 API 的自建地址。
 
 ---
 
-## 🛠️ 项目构建与环境准备
+## 设计原则
 
-XUCMS 使用 Kotlin 作为开发语言，并由 Jetpack Compose 进行全声明式 UI 重塑，底层辅以 Flow & LiveCycle 架构机制进行开发。
+极简、易用、UI 逻辑正常。具体来说：
 
-### 系统要求
-- **Android Gradle Plugin (AGP)**：`v8+`
-- **Gradle 运行环境**：`v8.5+` 或 `v9.3`
-- **JDK 运行环境**：`Java 17`
+- **一屏一件事**。列表页只有列表，编辑页只有正文。元数据、图库这类次要内容放在 sheet 里，需要时才出现。
+- **单一强调色**。配色取自 [upxuu.com](https://upxuu.com) 的天蓝 + 石板灰 + 少量琥珀，但去掉了博客的粗野主义边框与位移阴影：这里全是平面表面加一根发丝线。
+- **没有装饰性动效**。转场只有 180ms 的淡入和轻微位移。
+- **可预测的返回栈**。返回永远回到上一页，不会中途跳到别处；退出编辑器会自动落一份本地草稿。
 
-### 常用命令
+## 编辑器
+
+`app/src/main/java/com/upxuu/xucms/editor/` 下是完整实现，分三层：
+
+| 层 | 文件 | 职责 |
+| --- | --- | --- |
+| 模型 | `model/Block.kt`、`model/MarkSpan.kt` | 块类型 + 行内样式区间。文本里不含 Markdown 标记 |
+| 编解码 | `markdown/InlineMarkdown.kt`、`markdown/BlockMarkdown.kt`、`markdown/FrontmatterCodec.kt` | Markdown ⇄ 块列表的双向转换 |
+| 状态与视图 | `EditorState.kt`、`ui/MarkdownEditor.kt`、`ui/EditorToolbar.kt` | 光标、撤销栈、自动格式化、渲染 |
+
+工作方式：文档是一串 `Block`，每块一个 `BasicTextField`。块类型（H1、列表、引用……）决定这一块用什么字号、什么装饰；行内加粗/斜体/删除线/行内代码/链接存成 `MarkSpan` 区间，通过 `VisualTransformation` 画上去——偏移量不变，所以光标和选区不会漂。
+
+支持的能力：
+
+- 标题 H1–H3、正文、无序/有序/任务列表（含多级缩进）、引用、围栏代码块、分割线、图片块
+- 行内：**加粗**、*斜体*、~~删除线~~、`行内代码`、链接
+- 输入即转换：行首输入 `# `、`## `、`- `、`1. `、`> `、`[] ` 立刻变成对应块，标记不会留下
+- 回车在列表里续行、在空列表项上退出列表；退格在块首降级或与上一块合并
+- 撤销/重做（80 步）
+
+Frontmatter 里应用不认识的键会原样保留，所以手写的 `license`、`series` 之类不会因为在手机上保存一次就丢。
+
+## 其他功能
+
+- **草稿**：编辑停止约 8 秒后写入应用私有目录（间隔可在设置里改，也可关闭）。发布成功才清除。列表页会把未同步的草稿单独列出来。
+- **离线可用**：拉取失败时回落到本地草稿，仍然可以继续写。
+- **图片**：选图后先在本地压到最长边 1920、JPEG 质量 86 再上传，避免手机原图撑爆请求体。图库支持多选插入、复制链接/Markdown、删除。
+- **主题**：跟随系统 / 浅色 / 深色。
+
+## 构建
+
+需要 JDK 17。仓库里不含 Gradle wrapper，CI 会自动生成；本地可以用已安装的 Gradle 9.3.1+：
+
 ```bash
-# 验证代码编译可靠性
-gradle compileDebugJavaWithJavac
-
-# 构建可用于装机调试的 Debug 版本 APK
-gradle assembleDebug
-
-# 构建适用于分发与发布的 Release APK 包
-gradle规律 assembleRelease
+gradle wrapper --gradle-version 9.3.1   # 首次
+./gradlew testDebugUnitTest             # 单元测试
+./gradlew assembleDebug                 # 可安装的 debug 包
+./gradlew assembleRelease               # 发布包
 ```
 
----
+`local.properties` 里需要有 `sdk.dir` 指向 Android SDK。
 
-## ⚙️ 配置文件与存储安全性
+推送到 `main` 会触发 [`.github/workflows/release.yml`](.github/workflows/release.yml)：跑单元测试 → 构建 debug 与 release APK → 上传 artifact 并发一个 Release。
 
-- **Token 与配置存储**：使用了 Android 的安全文件隔离域，用户所填写的自定义 API Base URL 以及 Token 会直接加密或隔绝存入 `SharedPreferences`。
-- **自动化流控**：每次启动应用，`MainActivity` 会预先读取首选项并同步更新 `com.example.data.Api.BASE_URL`。
+## 技术栈
 
-## 🤝 贡献与反馈
+Kotlin · Jetpack Compose · Material 3 · Navigation Compose · OkHttp · kotlinx.serialization · Coil。没有 Room、没有 Hilt、没有富文本库——依赖表刻意保持得很短。
 
-欢迎您为 XUCMS 提交 Issue 或 PR。任何对于排版精美度、缓存机制以及自动构建方法的优化建议，都将帮助我们将项目打造成更高效的写作利器！
+## 隐私
+
+管理密钥与服务地址只存在应用私有 `SharedPreferences`，只发往你自己填写的服务地址。草稿存在应用私有目录，卸载即删除。不含统计、广告与崩溃上报 SDK。

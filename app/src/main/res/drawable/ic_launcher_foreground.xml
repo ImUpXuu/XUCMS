@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:width="66dp"
-        android:height="66dp"
-        android:drawable="@drawable/upxuu_editor_icon_1780823291951"
-        android:gravity="center" />
-</layer-list>
+<!-- XUCMS mark: an "X" over a writing rule, in the site's sky blue and amber. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M37,34 L71,70"
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="9"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M71,34 L37,70"
+        android:strokeColor="#0EA5E9"
+        android:strokeWidth="9"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M39,81 L69,81"
+        android:strokeColor="#FDE68A"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+</vector>

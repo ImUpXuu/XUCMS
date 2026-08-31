@@ -1,22 +1,25 @@
-name: Android CI & Release
+name: Build & Release
 
 on:
   push:
-    branches:
-      - main
-      - master
-    tags:
-      - '**'
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
   workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    name: Build APK & Release
+    name: Test & Build APK
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -24,65 +27,75 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Generate Gradle Wrapper
-        run: gradle wrapper
+      - name: Generate Gradle wrapper
+        run: gradle wrapper --gradle-version 9.3.1
 
-      - name: Setup Keystore
+      - name: Prepare debug keystore
         run: |
           if [ -f debug.keystore.base64 ]; then
             base64 -d debug.keystore.base64 > debug.keystore
-            echo "Decoded debug.keystore from base64."
           fi
           if [ ! -f debug.keystore ]; then
-            echo "Generating new debug.keystore..."
-            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            keytool -genkey -v -keystore debug.keystore -storepass android \
+              -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
+              -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-      - name: Build Debug APK (Installable)
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/
+
+      - name: Build debug APK
         run: ./gradlew assembleDebug
 
-      - name: Build Release APK
+      - name: Build release APK
         run: ./gradlew assembleRelease
 
-      - name: Copy & Rename APKs
+      - name: Collect APKs
         run: |
           mkdir -p build-artifacts
           cp app/build/outputs/apk/debug/app-debug.apk build-artifacts/XUCMS-debug.apk
-          if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
-            cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifacts/XUCMS-release-unsigned.apk
-          elif [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            cp app/build/outputs/apk/release/app-release.apk build-artifacts/XUCMS-release.apk
-          fi
+          for candidate in app-release.apk app-release-unsigned.apk; do
+            if [ -f "app/build/outputs/apk/release/$candidate" ]; then
+              cp "app/build/outputs/apk/release/$candidate" "build-artifacts/XUCMS-release.apk"
+              break
+            fi
+          done
+          ls -la build-artifacts
 
-      - name: Upload APKs as Workflow Artifacts
+      - name: Upload APKs as artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: XUCMS-builds
+          name: XUCMS-apk
           path: build-artifacts/*
 
-      - name: Generate Tag Name
-        id: gen_tag
+      - name: Resolve release tag
+        if: github.event_name != 'pull_request'
+        id: tag
         run: |
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG_NAME="${{ github.ref_name }}"
+            echo "name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           else
             export TZ="Asia/Shanghai"
-            TAG_NAME=$(date +'%Y-%-m-%-d-%-H-%-M')
+            echo "name=build-$(date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
           fi
-          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Publish GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.gen_tag.outputs.tag }}
+          tag_name: ${{ steps.tag.outputs.name }}
           files: build-artifacts/*
-          draft: false
-          prerelease: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

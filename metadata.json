@@ -1,6 +1,0 @@
-{
-  "name": "XUCMS",
-  "description": "Android 说说客户端 App，支持查看说说列表、新建和编辑说说内容",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
