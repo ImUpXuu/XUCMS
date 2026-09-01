@@ -37,7 +37,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -99,8 +101,17 @@ fun EditorToolbar(
   onEditLink: () -> Unit,
 ) {
   val colors = MaterialTheme.colorScheme
-  val block = state.focusedBlock()
-  val active = state.activeMarks()
+
+  // Selection state is read through derivedStateOf so a keystroke that does not
+  // change which controls are highlighted does not recompose the whole strip.
+  val focusedType by remember(state) {
+    derivedStateOf { state.focusedBlock()?.type }
+  }
+  val activeMarks by remember(state) {
+    derivedStateOf { state.activeMarks() }
+  }
+  val canUndo by remember(state) { derivedStateOf { state.canUndo } }
+  val canRedo by remember(state) { derivedStateOf { state.canRedo } }
 
   Surface(modifier = modifier.fillMaxWidth(), color = colors.surface) {
     Column {
@@ -118,8 +129,13 @@ fun EditorToolbar(
           actions.forEach { action ->
             ToolbarControl(
               action = action,
-              selected = isSelected(action, block?.type, active),
-              enabled = isEnabled(action, state),
+              selected = isSelected(action, focusedType, activeMarks),
+              enabled = when (action) {
+                ToolbarAction.UNDO -> canUndo
+                ToolbarAction.REDO -> canRedo
+                ToolbarAction.INDENT, ToolbarAction.OUTDENT -> focusedType?.isList == true
+                else -> true
+              },
               onClick = { dispatch(action, state, onPickImage, onOpenGallery, onEditLink) },
             )
           }
@@ -195,13 +211,6 @@ private fun isSelected(
   ToolbarAction.INLINE_CODE -> InlineMark.CODE in active
   ToolbarAction.LINK -> InlineMark.LINK in active
   else -> action.blockType != null && action.blockType == blockType
-}
-
-private fun isEnabled(action: ToolbarAction, state: EditorState): Boolean = when (action) {
-  ToolbarAction.UNDO -> state.canUndo
-  ToolbarAction.REDO -> state.canRedo
-  ToolbarAction.INDENT, ToolbarAction.OUTDENT -> state.focusedBlock()?.type?.isList == true
-  else -> true
 }
 
 private fun dispatch(

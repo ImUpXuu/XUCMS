@@ -156,6 +156,28 @@ class EditorStateTest {
   }
 
   @Test
+  fun `consecutive typing coalesces into one undo entry`() {
+    // Per-keystroke snapshots would copy the whole document each time and make
+    // undo step one character at a time.
+    val state = EditorState("a")
+    state.typeInto(0, "ab")
+    state.typeInto(0, "abc")
+    state.typeInto(0, "abcd")
+    state.undo()
+    assertEquals("a", state.blocks[0].text)
+    assertFalse(state.canUndo)
+  }
+
+  @Test
+  fun `a structural change is its own undo step`() {
+    val state = EditorState("line")
+    state.focus(state.blocks[0].id)
+    state.setBlockType(BlockType.H2)
+    state.undo()
+    assertEquals(BlockType.PARAGRAPH, state.blocks[0].type)
+  }
+
+  @Test
   fun `setBlockType toggles back to paragraph when reapplied`() {
     val state = EditorState("line")
     state.focus(state.blocks[0].id)

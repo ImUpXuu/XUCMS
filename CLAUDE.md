@@ -87,7 +87,17 @@ Two properties are load-bearing and easy to regress: the gesture must wait for `
 
 All durations and curves live in `ui/theme/Motion.kt`; do not write a bare `tween(200)` at a call site. Springs are preferred for anything driven by a finger or a caret because they preserve velocity when a second gesture interrupts the first; tweens are for discrete flips like a colour swap or a panel appearing. Nothing bounces, spins, or draws attention to itself.
 
-The editor keeps the caret clear of the keyboard by measuring the cursor rectangle from `onTextLayout` plus `boundsInWindow`, then calling `animateScrollBy` with exactly the overlap. That is why `BlockField` takes an `onCaretRect` callback — the scroll amount has to come from real layout, not from a guess about line height.
+The editor keeps the caret clear of the keyboard by measuring the cursor rectangle from `onTextLayout` plus `boundsInWindow`, then calling `animateScrollBy` with exactly the overlap. That is why `BlockField` takes an `onCaretRect` callback — the scroll amount has to come from real layout, not from a guess about line height. Two guards are load-bearing: the caret rectangle is cleared when focus leaves the editor (a stale one made opening the keyboard jump), and the effect waits a frame to confirm the viewport has stopped resizing (the keyboard animates over several frames, and acting on an intermediate height scrolls by the wrong amount).
+
+## Editor performance
+
+The typing path runs on every keystroke, so it is kept allocation-light on purpose. If you change any of this, keep the fast paths:
+
+- `InlineMarkdown.parse` returns the input untouched when it contains no marker characters at all, which is most lines of prose.
+- `MarkSpans.normalize/remap/slice/shift` return early for empty and single-element inputs instead of running the group-and-sort path.
+- `blockTextStyle` and `rememberMarkTransformation` are memoised; the transformation resolves each mark's `SpanStyle` once per mark set rather than per character run, and returns `VisualTransformation.None` when a block has no marks.
+- `EditorState.pushHistory` takes a tag and coalesces consecutive same-tag edits inside a short window. A snapshot copies the whole block list, so pushing per keystroke would allocate a document copy per character *and* make undo step one letter at a time. Structural changes clear the tag so they stay separate undo steps.
+- `EditorToolbar` reads selection state through `derivedStateOf`, and `MarkdownEditor` passes a remembered `onCaretRect` lambda plus a `contentType` to `items`, so a keystroke in one block does not recompose the others.
 
 ## Toolbar configuration
 

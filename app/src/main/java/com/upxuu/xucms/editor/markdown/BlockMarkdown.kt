@@ -11,8 +11,10 @@ import com.upxuu.xucms.editor.model.BlockType
 object BlockMarkdown {
 
   fun parse(markdown: String): List<Block> {
+    // Split once. A single pass over the lines with an index is enough; building
+    // intermediate lists per block would allocate proportionally to document size.
     val lines = markdown.replace("\r\n", "\n").replace('\r', '\n').split("\n")
-    val blocks = mutableListOf<Block>()
+    val blocks = ArrayList<Block>(lines.size)
     var i = 0
 
     while (i < lines.size) {
@@ -104,7 +106,8 @@ object BlockMarkdown {
   }
 
   fun serialize(blocks: List<Block>): String {
-    val out = StringBuilder()
+    // Rough capacity guess so the builder does not grow repeatedly on long documents.
+    val out = StringBuilder(blocks.sumOf { it.text.length + 8 } + 16)
     var previous: Block? = null
 
     for (block in blocks) {

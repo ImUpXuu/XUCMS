@@ -36,10 +36,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,22 +91,39 @@ fun MarkdownEditor(
   val density = LocalDensity.current
 
   // Comfortable gap between the caret line and the toolbar/keyboard edge.
-  val bottomGap = with(density) { 28.dp.toPx() }
+  val bottomGap = with(density) { 20.dp.toPx() }
   val topGap = with(density) { 12.dp.toPx() }
 
-  var viewport by remember { mutableStateOf<Rect?>(null) }
+  var viewportBottom by remember { mutableFloatStateOf(0f) }
+  var viewportTop by remember { mutableFloatStateOf(0f) }
   var caret by remember { mutableStateOf<Rect?>(null) }
 
-  LaunchedEffect(caret, viewport) {
-    val cursor = caret ?: return@LaunchedEffect
-    val bounds = viewport ?: return@LaunchedEffect
-    if (bounds.height <= 0f) return@LaunchedEffect
+  // Forget the caret as soon as the editor loses focus. Otherwise a stale rectangle
+  // from the last edited block would drive a scroll when focus moves to the title
+  // field, which is what made opening the keyboard jump to a random place.
+  LaunchedEffect(state.focusedId) {
+    if (state.focusedId == null) caret = null
+  }
 
-    val below = cursor.bottom - (bounds.bottom - bottomGap)
-    val above = (bounds.top + topGap) - cursor.top
+  LaunchedEffect(caret, viewportTop, viewportBottom) {
+    val cursor = caret ?: return@LaunchedEffect
+    if (state.focusedId == null) return@LaunchedEffect
+    if (viewportBottom - viewportTop <= 0f) return@LaunchedEffect
+
+    // The keyboard resizes the viewport over several frames. Acting on an
+    // intermediate size scrolls by the wrong amount, so wait for it to settle.
+    val settledBottom = viewportBottom
+    val settledTop = viewportTop
+    withFrameNanos { }
+    if (settledBottom != viewportBottom || settledTop != viewportTop) return@LaunchedEffect
+
+    val below = cursor.bottom - (viewportBottom - bottomGap)
+    val above = (viewportTop + topGap) - cursor.top
     val delta = when {
       below > 1f -> below
-      above > 1f -> -above
+      // Only pull back up when the caret is genuinely above the viewport, never to
+      // "centre" it — unsolicited upward scrolling feels like the page fighting back.
+      above > 1f && above < (viewportBottom - viewportTop) -> -above
       else -> 0f
     }
     if (delta != 0f) {
@@ -111,21 +131,33 @@ fun MarkdownEditor(
     }
   }
 
+  // A stable callback identity, so every block does not recompose whenever the
+  // caret rectangle changes.
+  val reportCaret: (Rect) -> Unit = remember { { rect -> caret = rect } }
+  val singleEmptyBlock by remember(state) {
+    derivedStateOf {
+      val blocks = state.blocks
+      blocks.size == 1 && blocks[0].text.isEmpty() && blocks[0].type == BlockType.PARAGRAPH
+    }
+  }
+
   LazyColumn(
-    modifier = modifier.onGloballyPositioned { viewport = it.boundsInWindow() },
+    modifier = modifier.onGloballyPositioned { coords ->
+      val bounds = coords.boundsInWindow()
+      viewportTop = bounds.top
+      viewportBottom = bounds.bottom
+    },
     state = listState,
     contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 120.dp),
     verticalArrangement = Arrangement.spacedBy(2.dp),
   ) {
-    items(state.blocks, key = { it.id }) { block ->
+    items(state.blocks, key = { it.id }, contentType = { it.type }) { block ->
       BlockRow(
         state = state,
         block = block,
-        showPlaceholder = placeholder.takeIf {
-          state.blocks.size == 1 && block.text.isEmpty() && block.type == BlockType.PARAGRAPH
-        },
+        showPlaceholder = if (singleEmptyBlock) placeholder else null,
         onImageClick = onImageClick,
-        onCaretRect = { rect -> caret = rect },
+        onCaretRect = reportCaret,
       )
     }
     item(key = "tail-spacer") {

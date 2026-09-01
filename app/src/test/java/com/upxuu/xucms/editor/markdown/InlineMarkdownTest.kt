@@ -77,6 +77,13 @@ class InlineMarkdownTest {
   }
 
   @Test
+  fun `text without markers takes the fast path unchanged`() {
+    val parsed = InlineMarkdown.parse("普通一行文字，没有任何标记 123")
+    assertEquals("普通一行文字，没有任何标记 123", parsed.text)
+    assertTrue(parsed.marks.isEmpty())
+  }
+
+  @Test
   fun `link round trips through serialize`() {
     val source = "go [here](https://x.dev) now"
     val parsed = InlineMarkdown.parse(source)

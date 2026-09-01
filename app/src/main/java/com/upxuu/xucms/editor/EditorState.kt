@@ -37,6 +37,8 @@ class EditorState(initialMarkdown: String = "") {
   private val undoStack = ArrayDeque<List<Block>>()
   private val redoStack = ArrayDeque<List<Block>>()
   private var suppressHistory = false
+  private var lastHistoryTag: String? = null
+  private var lastHistoryAt = 0L
 
   val canUndo: Boolean get() = undoStack.isNotEmpty()
   val canRedo: Boolean get() = redoStack.isNotEmpty()
@@ -118,7 +120,7 @@ class EditorState(initialMarkdown: String = "") {
       return
     }
 
-    pushHistory()
+    pushHistory(TAG_TYPING)
 
     val edit = diff(oldText, newText)
     val marks = MarkSpans.remap(block.marks, edit.start, edit.oldEnd, edit.insertedLength, newText.length)
@@ -128,6 +130,8 @@ class EditorState(initialMarkdown: String = "") {
     val shortcut = if (block.type != BlockType.CODE) detectShortcut(updated) else null
     if (shortcut != null) {
       updated = shortcut
+      // A structural change should not merge into the surrounding typing run.
+      lastHistoryTag = null
     }
 
     _blocks[index] = updated
@@ -475,26 +479,47 @@ class EditorState(initialMarkdown: String = "") {
 
   // ------------------------------------------------------------------ undo
 
-  private fun pushHistory() {
+  /**
+   * Snapshots the document before a mutation.
+   *
+   * Consecutive plain typing coalesces into one entry: a snapshot copies the whole
+   * block list, so pushing per keystroke would allocate a full document copy for
+   * every character and make undo step one letter at a time. [tag] identifies the
+   * kind of edit; identical tags arriving inside [COALESCE_WINDOW_MILLIS] reuse the
+   * existing snapshot instead of adding another.
+   */
+  private fun pushHistory(tag: String? = null) {
     if (suppressHistory) return
-    undoStack.addLast(_blocks.map { it.copy() })
-    if (undoStack.size > 80) undoStack.removeFirst()
+
+    val now = System.currentTimeMillis()
+    if (tag != null && tag == lastHistoryTag && now - lastHistoryAt < COALESCE_WINDOW_MILLIS) {
+      lastHistoryAt = now
+      redoStack.clear()
+      return
+    }
+
+    undoStack.addLast(_blocks.toList())
+    if (undoStack.size > HISTORY_LIMIT) undoStack.removeFirst()
     redoStack.clear()
+    lastHistoryTag = tag
+    lastHistoryAt = now
   }
 
   fun undo() {
     val snapshot = undoStack.removeLastOrNull() ?: return
-    redoStack.addLast(_blocks.map { it.copy() })
+    redoStack.addLast(_blocks.toList())
     _blocks.clear()
     _blocks.addAll(snapshot)
+    lastHistoryTag = null
     revision++
   }
 
   fun redo() {
     val snapshot = redoStack.removeLastOrNull() ?: return
-    undoStack.addLast(_blocks.map { it.copy() })
+    undoStack.addLast(_blocks.toList())
     _blocks.clear()
     _blocks.addAll(snapshot)
+    lastHistoryTag = null
     revision++
   }
 
@@ -527,6 +552,9 @@ class EditorState(initialMarkdown: String = "") {
     val text = block.text
     val caret = block.value.selection.start
     if (caret == 0) return null
+    // A shortcut marker is at most four characters, so anything longer cannot be
+    // one — worth checking first because this runs on every keystroke.
+    if (caret > 4) return null
 
     fun stripped(prefixLength: Int, type: BlockType, checked: Boolean = false, indent: Int = block.indent): Block {
       val rest = text.substring(prefixLength)
@@ -556,5 +584,14 @@ class EditorState(initialMarkdown: String = "") {
       block.type == BlockType.PARAGRAPH && head == "--- " -> null
       else -> null
     }
+  }
+
+  companion object {
+    private const val HISTORY_LIMIT = 80
+
+    /** Typing pauses longer than this start a new undo entry. */
+    private const val COALESCE_WINDOW_MILLIS = 900L
+
+    private const val TAG_TYPING = "typing"
   }
 }

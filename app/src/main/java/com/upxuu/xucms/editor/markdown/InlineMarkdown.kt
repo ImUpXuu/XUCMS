@@ -15,8 +15,14 @@ data class InlineText(val text: String, val marks: List<MarkSpan>)
  */
 object InlineMarkdown {
 
+  private val MARKERS = charArrayOf('\\', '`', '!', '[', '~', '*', '_')
+
   fun parse(source: String): InlineText {
-    val out = StringBuilder()
+    // Text with no markers at all is the common case — most lines of prose contain
+    // none — so return it without walking character by character or allocating.
+    if (source.none { it in MARKERS }) return InlineText(source, emptyList())
+
+    val out = StringBuilder(source.length)
     val marks = mutableListOf<MarkSpan>()
     var i = 0
 

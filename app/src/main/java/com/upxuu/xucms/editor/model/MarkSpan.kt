@@ -23,9 +23,18 @@ data class MarkSpan(
 }
 
 object MarkSpans {
-  /** Merges touching/overlapping spans of the same kind and drops empty ones. */
+  /**
+   * Merges touching/overlapping spans of the same kind and drops empty ones.
+   *
+   * The empty and single-span cases return early without allocating: plain text is
+   * by far the common case on the typing path, and this runs for every keystroke.
+   */
   fun normalize(spans: List<MarkSpan>, textLength: Int): List<MarkSpan> {
+    if (spans.isEmpty()) return emptyList()
+    if (spans.size == 1) return spans.first().clamp(textLength)?.let { listOf(it) } ?: emptyList()
+
     val clamped = spans.mapNotNull { it.clamp(textLength) }
+    if (clamped.size <= 1) return clamped
     val out = mutableListOf<MarkSpan>()
     for (group in clamped.groupBy { it.mark to it.href }.values) {
       val sorted = group.sortedBy { it.start }
@@ -88,6 +97,7 @@ object MarkSpans {
    * when they keep typing inside bold text.
    */
   fun remap(spans: List<MarkSpan>, editStart: Int, editEnd: Int, inserted: Int, newLength: Int): List<MarkSpan> {
+    if (spans.isEmpty()) return emptyList()
     val delta = inserted - (editEnd - editStart)
     val out = mutableListOf<MarkSpan>()
     for (span in spans) {
@@ -109,13 +119,17 @@ object MarkSpans {
   }
 
   /** Slices spans to `[from, to)` and rebases them to 0. */
-  fun slice(spans: List<MarkSpan>, from: Int, to: Int): List<MarkSpan> =
-    spans.mapNotNull { span ->
+  fun slice(spans: List<MarkSpan>, from: Int, to: Int): List<MarkSpan> {
+    if (spans.isEmpty()) return emptyList()
+    return spans.mapNotNull { span ->
       val s = maxOf(span.start, from)
       val e = minOf(span.end, to)
       if (e > s) span.copy(start = s - from, end = e - from) else null
     }
+  }
 
-  fun shift(spans: List<MarkSpan>, by: Int): List<MarkSpan> =
-    spans.map { it.copy(start = it.start + by, end = it.end + by) }
+  fun shift(spans: List<MarkSpan>, by: Int): List<MarkSpan> {
+    if (spans.isEmpty() || by == 0) return spans
+    return spans.map { it.copy(start = it.start + by, end = it.end + by) }
+  }
 }

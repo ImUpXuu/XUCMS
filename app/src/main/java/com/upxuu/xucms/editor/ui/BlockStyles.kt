@@ -19,23 +19,30 @@ import com.upxuu.xucms.editor.model.BlockType
 import com.upxuu.xucms.editor.model.InlineMark
 import com.upxuu.xucms.editor.model.MarkSpan
 
-/** Text style each block type is edited *and* displayed with — one source of truth. */
+/**
+ * Text style each block type is edited *and* displayed with — one source of truth.
+ *
+ * Cached per type: a document of a few hundred blocks would otherwise rebuild an
+ * identical TextStyle for every one of them on each recomposition.
+ */
 @Composable
 fun blockTextStyle(type: BlockType): TextStyle {
   val colors = MaterialTheme.colorScheme
   val typography = MaterialTheme.typography
-  return when (type) {
-    BlockType.H1 -> typography.headlineMedium.copy(color = colors.primary, fontWeight = FontWeight.ExtraBold)
-    BlockType.H2 -> typography.headlineSmall.copy(color = colors.primary, fontWeight = FontWeight.Bold)
-    BlockType.H3 -> typography.titleLarge.copy(color = colors.onSurface, fontWeight = FontWeight.Bold)
-    BlockType.QUOTE -> typography.bodyLarge.copy(color = colors.onSurfaceVariant)
-    BlockType.CODE -> typography.bodyMedium.copy(
-      fontFamily = FontFamily.Monospace,
-      color = colors.onSurface,
-      fontSize = 13.sp,
-      lineHeight = 20.sp,
-    )
-    else -> typography.bodyLarge.copy(color = colors.onSurface)
+  return remember(type, colors, typography) {
+    when (type) {
+      BlockType.H1 -> typography.headlineMedium.copy(color = colors.primary, fontWeight = FontWeight.ExtraBold)
+      BlockType.H2 -> typography.headlineSmall.copy(color = colors.primary, fontWeight = FontWeight.Bold)
+      BlockType.H3 -> typography.titleLarge.copy(color = colors.onSurface, fontWeight = FontWeight.Bold)
+      BlockType.QUOTE -> typography.bodyLarge.copy(color = colors.onSurfaceVariant)
+      BlockType.CODE -> typography.bodyMedium.copy(
+        fontFamily = FontFamily.Monospace,
+        color = colors.onSurface,
+        fontSize = 13.sp,
+        lineHeight = 20.sp,
+      )
+      else -> typography.bodyLarge.copy(color = colors.onSurface)
+    }
   }
 }
 
@@ -43,18 +50,33 @@ fun blockTextStyle(type: BlockType): TextStyle {
  * Paints inline marks directly on the editable text. Offsets are untouched, so the
  * caret and selection stay exactly where the user put them — this is the core of
  * the what-you-see-is-what-you-get behaviour.
+ *
+ * The unstyled case short-circuits to [VisualTransformation.None]: most blocks in a
+ * document carry no inline marks, and this runs on every keystroke of the focused
+ * block, so skipping the AnnotatedString rebuild there matters.
  */
 @Composable
 fun rememberMarkTransformation(marks: List<MarkSpan>): VisualTransformation {
   val colors = MaterialTheme.colorScheme
-  return remember(marks, colors) {
+  val accent = colors.primary
+  val codeBackground = colors.tertiaryContainer
+  val onSurface = colors.onSurface
+
+  return remember(marks, accent, codeBackground, onSurface) {
+    if (marks.isEmpty()) return@remember VisualTransformation.None
+
+    // Styles are resolved once per mark set rather than per character run.
+    val styled = marks.map { span ->
+      span to spanStyleFor(span.mark, accent, codeBackground, onSurface)
+    }
+
     VisualTransformation { original ->
       val builder = AnnotatedString.Builder(original.text)
-      marks.forEach { span ->
-        val start = span.start.coerceIn(0, original.text.length)
-        val end = span.end.coerceIn(0, original.text.length)
-        if (end <= start) return@forEach
-        builder.addStyle(spanStyleFor(span.mark, colors.primary, colors.tertiaryContainer, colors.onSurface), start, end)
+      val length = original.text.length
+      styled.forEach { (span, style) ->
+        val start = span.start.coerceIn(0, length)
+        val end = span.end.coerceIn(0, length)
+        if (end > start) builder.addStyle(style, start, end)
       }
       TransformedText(builder.toAnnotatedString(), OffsetMapping.Identity)
     }
