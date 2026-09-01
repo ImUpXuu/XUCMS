@@ -1,6 +1,5 @@
 package com.upxuu.xucms.navigation
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,6 +24,8 @@ import com.upxuu.xucms.feature.home.HomeScreen
 import com.upxuu.xucms.feature.login.LoginScreen
 import com.upxuu.xucms.feature.settings.AboutScreen
 import com.upxuu.xucms.feature.settings.SettingsScreen
+import com.upxuu.xucms.feature.settings.ToolbarSettingsScreen
+import com.upxuu.xucms.ui.theme.Motion
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -33,6 +34,7 @@ object Routes {
   const val HOME = "home"
   const val GALLERY = "gallery"
   const val SETTINGS = "settings"
+  const val TOOLBAR = "settings/toolbar"
   const val ABOUT = "about"
 
   private const val EDITOR_BASE = "editor"
@@ -52,20 +54,21 @@ fun XucmsApp(navController: NavHostController = rememberNavController()) {
   val start = if (signedIn) Routes.HOME else Routes.LOGIN
 
   // Screens arrive from the right and lift very slightly; the outgoing screen only
-  // fades so two moving surfaces never fight for attention.
-  val enterSpec = tween<Float>(220, easing = FastOutSlowInEasing)
-
+  // fades so two moving surfaces never fight for attention. Curves come from Motion
+  // so every transition in the app shares the same feel.
   NavHost(
     navController = navController,
     startDestination = start,
     enterTransition = {
-      fadeIn(enterSpec) + slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { it / 10 } +
-        scaleIn(enterSpec, initialScale = 0.98f)
+      fadeIn(Motion.enterTween()) +
+        slideInHorizontally(tween(Motion.NORMAL, easing = Motion.Decelerate)) { it / 12 } +
+        scaleIn(Motion.enterTween(), initialScale = 0.985f)
     },
-    exitTransition = { fadeOut(tween(150)) + scaleOut(tween(150), targetScale = 0.99f) },
-    popEnterTransition = { fadeIn(tween(180)) + scaleIn(tween(180), initialScale = 0.99f) },
+    exitTransition = { fadeOut(Motion.exitTween()) + scaleOut(Motion.exitTween(), targetScale = 0.99f) },
+    popEnterTransition = { fadeIn(Motion.enterTween()) + scaleIn(Motion.enterTween(), initialScale = 0.99f) },
     popExitTransition = {
-      fadeOut(tween(160)) + slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { it / 10 }
+      fadeOut(Motion.exitTween()) +
+        slideOutHorizontally(tween(Motion.NORMAL, easing = Motion.Accelerate)) { it / 12 }
     },
   ) {
     composable(Routes.LOGIN) {
@@ -130,10 +133,15 @@ fun XucmsApp(navController: NavHostController = rememberNavController()) {
       SettingsScreen(
         onBack = { navController.popBackStack() },
         onAbout = { navController.navigate(Routes.ABOUT) },
+        onToolbar = { navController.navigate(Routes.TOOLBAR) },
         onSignedOut = {
           navController.navigate(Routes.LOGIN) { popUpTo(0) }
         },
       )
+    }
+
+    composable(Routes.TOOLBAR) {
+      ToolbarSettingsScreen(onBack = { navController.popBackStack() })
     }
 
     composable(Routes.ABOUT) {

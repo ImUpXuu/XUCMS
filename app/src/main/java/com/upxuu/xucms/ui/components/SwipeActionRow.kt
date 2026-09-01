@@ -54,7 +54,7 @@ fun SwipeActionRow(
   val settings = rememberUpdatedState(onSettings)
 
   val state = rememberSwipeToDismissBoxState(
-    positionalThreshold = { width -> width * 0.55f },
+    positionalThreshold = { width -> width * 0.5f },
     confirmValueChange = { value ->
       when (value) {
         SwipeToDismissBoxValue.StartToEnd -> delete.value()

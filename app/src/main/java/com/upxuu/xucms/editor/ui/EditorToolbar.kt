@@ -2,23 +2,20 @@ package com.upxuu.xucms.editor.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FormatIndentDecrease
+import androidx.compose.material.icons.automirrored.outlined.FormatIndentIncrease
 import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Undo
@@ -50,172 +47,183 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.upxuu.xucms.editor.EditorState
+import com.upxuu.xucms.editor.ToolbarAction
+import com.upxuu.xucms.editor.ToolbarLayout
 import com.upxuu.xucms.editor.model.BlockType
 import com.upxuu.xucms.editor.model.InlineMark
 import com.upxuu.xucms.ui.components.PressableIcon
+import com.upxuu.xucms.ui.theme.Motion
+
+/** Icon for an action, or null when it renders as a text chip instead. */
+fun toolbarIconFor(action: ToolbarAction): ImageVector? = when (action) {
+  ToolbarAction.BOLD -> Icons.Outlined.FormatBold
+  ToolbarAction.ITALIC -> Icons.Outlined.FormatItalic
+  ToolbarAction.STRIKE -> Icons.Outlined.FormatStrikethrough
+  ToolbarAction.INLINE_CODE -> Icons.Outlined.Code
+  ToolbarAction.LINK -> Icons.Outlined.Link
+  ToolbarAction.BULLET_LIST -> Icons.AutoMirrored.Outlined.FormatListBulleted
+  ToolbarAction.ORDERED_LIST -> Icons.Outlined.FormatListNumbered
+  ToolbarAction.TODO_LIST -> Icons.Outlined.CheckBox
+  ToolbarAction.QUOTE -> Icons.Outlined.FormatQuote
+  ToolbarAction.CODE_BLOCK -> Icons.Outlined.DataObject
+  ToolbarAction.INDENT -> Icons.AutoMirrored.Outlined.FormatIndentIncrease
+  ToolbarAction.OUTDENT -> Icons.AutoMirrored.Outlined.FormatIndentDecrease
+  ToolbarAction.DIVIDER -> Icons.Outlined.HorizontalRule
+  ToolbarAction.UPLOAD_IMAGE -> Icons.Outlined.Image
+  ToolbarAction.GALLERY -> Icons.Outlined.PhotoLibrary
+  ToolbarAction.UNDO -> Icons.Default.Undo
+  ToolbarAction.REDO -> Icons.Default.Redo
+  else -> null
+}
+
+/** Short label for the style chips. */
+fun toolbarChipLabel(action: ToolbarAction): String = when (action) {
+  ToolbarAction.STYLE_H1 -> "H1"
+  ToolbarAction.STYLE_H2 -> "H2"
+  ToolbarAction.STYLE_H3 -> "H3"
+  else -> "正文"
+}
 
 /**
- * A single scrollable strip of controls that sits above the keyboard. Paragraph
- * style, inline emphasis and insertions are all one tap deep — no nested menus.
+ * The strip of controls above the keyboard. Which controls appear, their order and
+ * whether they wrap onto a second row all come from [layout], configured in
+ * settings, so this composable only renders and dispatches.
  */
 @Composable
 fun EditorToolbar(
   state: EditorState,
+  layout: ToolbarLayout,
   modifier: Modifier = Modifier,
   onPickImage: () -> Unit,
   onOpenGallery: () -> Unit,
   onEditLink: () -> Unit,
 ) {
+  val colors = MaterialTheme.colorScheme
   val block = state.focusedBlock()
   val active = state.activeMarks()
-  val colors = MaterialTheme.colorScheme
 
   Surface(modifier = modifier.fillMaxWidth(), color = colors.surface) {
     Column {
       HorizontalDivider(color = colors.outlineVariant)
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .horizontalScroll(rememberScrollState())
-          .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-      ) {
-        StyleChip("H1", BlockType.H1, block?.type) { state.setBlockType(BlockType.H1) }
-        StyleChip("H2", BlockType.H2, block?.type) { state.setBlockType(BlockType.H2) }
-        StyleChip("H3", BlockType.H3, block?.type) { state.setBlockType(BlockType.H3) }
-        StyleChip("正文", BlockType.PARAGRAPH, block?.type) { state.setBlockType(BlockType.PARAGRAPH) }
-
-        ToolbarSeparator()
-
-        ToolbarIcon(Icons.Outlined.FormatBold, "加粗", InlineMark.BOLD in active) {
-          state.toggleInline(InlineMark.BOLD)
+      layout.rowsOfActions().forEachIndexed { index, actions ->
+        if (index > 0) HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.4f))
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+          actions.forEach { action ->
+            ToolbarControl(
+              action = action,
+              selected = isSelected(action, block?.type, active),
+              enabled = isEnabled(action, state),
+              onClick = { dispatch(action, state, onPickImage, onOpenGallery, onEditLink) },
+            )
+          }
         }
-        ToolbarIcon(Icons.Outlined.FormatItalic, "斜体", InlineMark.ITALIC in active) {
-          state.toggleInline(InlineMark.ITALIC)
-        }
-        ToolbarIcon(Icons.Outlined.FormatStrikethrough, "删除线", InlineMark.STRIKE in active) {
-          state.toggleInline(InlineMark.STRIKE)
-        }
-        ToolbarIcon(Icons.Outlined.Code, "行内代码", InlineMark.CODE in active) {
-          state.toggleInline(InlineMark.CODE)
-        }
-        ToolbarIcon(Icons.Outlined.Link, "链接", InlineMark.LINK in active, onClick = onEditLink)
-
-        ToolbarSeparator()
-
-        ToolbarIcon(
-          Icons.AutoMirrored.Outlined.FormatListBulleted,
-          "无序列表",
-          block?.type == BlockType.BULLET,
-        ) { state.setBlockType(BlockType.BULLET) }
-        ToolbarIcon(Icons.Outlined.FormatListNumbered, "有序列表", block?.type == BlockType.ORDERED) {
-          state.setBlockType(BlockType.ORDERED)
-        }
-        ToolbarIcon(Icons.Outlined.CheckBox, "任务列表", block?.type == BlockType.TODO) {
-          state.setBlockType(BlockType.TODO)
-        }
-        ToolbarIcon(Icons.Outlined.FormatQuote, "引用", block?.type == BlockType.QUOTE) {
-          state.setBlockType(BlockType.QUOTE)
-        }
-        ToolbarIcon(Icons.Outlined.DataObject, "代码块", block?.type == BlockType.CODE) {
-          state.setBlockType(BlockType.CODE)
-        }
-
-        ToolbarSeparator()
-
-        ToolbarIcon(Icons.Outlined.HorizontalRule, "分割线", false) { state.insertDivider() }
-        ToolbarIcon(Icons.Outlined.Image, "上传图片", false, onClick = onPickImage)
-        ToolbarIcon(Icons.Outlined.PhotoLibrary, "图库", false, onClick = onOpenGallery)
-
-        ToolbarSeparator()
-
-        ToolbarIcon(Icons.Default.Undo, "撤销", false, enabled = state.canUndo) { state.undo() }
-        ToolbarIcon(Icons.Default.Redo, "重做", false, enabled = state.canRedo) { state.redo() }
       }
     }
   }
 }
 
+/** Shared by the toolbar and by the settings screen that previews it. */
 @Composable
-private fun ToolbarSeparator() {
-  Box(
-    modifier = Modifier
-      .padding(horizontal = 6.dp)
-      .width(1.dp)
-      .height(20.dp)
-      .background(MaterialTheme.colorScheme.outlineVariant),
-  )
-}
-
-@Composable
-private fun StyleChip(
-  label: String,
-  type: BlockType,
-  current: BlockType?,
+fun ToolbarControl(
+  action: ToolbarAction,
+  selected: Boolean,
+  enabled: Boolean,
   onClick: () -> Unit,
 ) {
-  val selected = current == type
   val colors = MaterialTheme.colorScheme
-  // Colour animates so tapping through styles reads as one continuous control
-  // rather than four separate buttons blinking.
   val container by animateColorAsState(
     targetValue = if (selected) colors.primaryContainer else Color.Transparent,
-    animationSpec = tween(160),
-    label = "chip-container",
+    animationSpec = Motion.normalTween(),
+    label = "toolbar-container",
   )
   val contentColor by animateColorAsState(
-    targetValue = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
-    animationSpec = tween(160),
-    label = "chip-content",
-  )
-  Text(
-    text = label,
-    style = MaterialTheme.typography.labelLarge,
-    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-    color = contentColor,
-    modifier = Modifier
-      .clip(RoundedCornerShape(9.dp))
-      .background(container)
-      .clickable(onClick = onClick)
-      .padding(horizontal = 11.dp, vertical = 9.dp),
-  )
-}
-
-@Composable
-private fun ToolbarIcon(
-  icon: ImageVector,
-  label: String,
-  selected: Boolean,
-  enabled: Boolean = true,
-  onClick: () -> Unit = {},
-) {
-  val colors = MaterialTheme.colorScheme
-  val tint by animateColorAsState(
     targetValue = when {
       !enabled -> colors.onSurfaceVariant.copy(alpha = 0.35f)
       selected -> colors.onPrimaryContainer
       else -> colors.onSurfaceVariant
     },
-    animationSpec = tween(160),
-    label = "icon-tint",
-  )
-  val background by animateColorAsState(
-    targetValue = if (selected) colors.primaryContainer else Color.Transparent,
-    animationSpec = tween(160),
-    label = "icon-bg",
+    animationSpec = Motion.normalTween(),
+    label = "toolbar-content",
   )
   val scale by animateFloatAsState(
-    targetValue = if (selected) 1.08f else 1f,
-    animationSpec = spring(dampingRatio = 0.45f, stiffness = 700f),
-    label = "icon-scale",
+    targetValue = if (selected) 1.06f else 1f,
+    animationSpec = Motion.snappySpring(),
+    label = "toolbar-scale",
   )
-  PressableIcon(onClick = onClick, enabled = enabled, background = background) {
-    Icon(
-      imageVector = icon,
-      contentDescription = label,
-      tint = tint,
-      modifier = Modifier.size(20.dp).scale(scale),
+
+  val icon = toolbarIconFor(action)
+  if (icon == null) {
+    Text(
+      text = toolbarChipLabel(action),
+      style = MaterialTheme.typography.labelLarge,
+      fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+      color = contentColor,
+      modifier = Modifier
+        .scale(scale)
+        .clip(RoundedCornerShape(9.dp))
+        .background(container)
+        .clickable(enabled = enabled, onClick = onClick)
+        .padding(horizontal = 11.dp, vertical = 9.dp),
     )
+  } else {
+    PressableIcon(onClick = onClick, enabled = enabled, background = container) {
+      Icon(
+        imageVector = icon,
+        contentDescription = action.label,
+        tint = contentColor,
+        modifier = Modifier.size(20.dp).scale(scale),
+      )
+    }
+  }
+}
+
+private fun isSelected(
+  action: ToolbarAction,
+  blockType: BlockType?,
+  active: Set<InlineMark>,
+): Boolean = when (action) {
+  ToolbarAction.BOLD -> InlineMark.BOLD in active
+  ToolbarAction.ITALIC -> InlineMark.ITALIC in active
+  ToolbarAction.STRIKE -> InlineMark.STRIKE in active
+  ToolbarAction.INLINE_CODE -> InlineMark.CODE in active
+  ToolbarAction.LINK -> InlineMark.LINK in active
+  else -> action.blockType != null && action.blockType == blockType
+}
+
+private fun isEnabled(action: ToolbarAction, state: EditorState): Boolean = when (action) {
+  ToolbarAction.UNDO -> state.canUndo
+  ToolbarAction.REDO -> state.canRedo
+  ToolbarAction.INDENT, ToolbarAction.OUTDENT -> state.focusedBlock()?.type?.isList == true
+  else -> true
+}
+
+private fun dispatch(
+  action: ToolbarAction,
+  state: EditorState,
+  onPickImage: () -> Unit,
+  onOpenGallery: () -> Unit,
+  onEditLink: () -> Unit,
+) {
+  when (action) {
+    ToolbarAction.BOLD -> state.toggleInline(InlineMark.BOLD)
+    ToolbarAction.ITALIC -> state.toggleInline(InlineMark.ITALIC)
+    ToolbarAction.STRIKE -> state.toggleInline(InlineMark.STRIKE)
+    ToolbarAction.INLINE_CODE -> state.toggleInline(InlineMark.CODE)
+    ToolbarAction.LINK -> onEditLink()
+    ToolbarAction.DIVIDER -> state.insertDivider()
+    ToolbarAction.UPLOAD_IMAGE -> onPickImage()
+    ToolbarAction.GALLERY -> onOpenGallery()
+    ToolbarAction.UNDO -> state.undo()
+    ToolbarAction.REDO -> state.redo()
+    ToolbarAction.INDENT -> state.indent(1)
+    ToolbarAction.OUTDENT -> state.indent(-1)
+    else -> action.blockType?.let { state.setBlockType(it) }
   }
 }

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -41,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.upxuu.xucms.LocalAppContainer
+import com.upxuu.xucms.editor.ToolbarLayout
 import com.upxuu.xucms.ui.components.FlatCard
 import com.upxuu.xucms.ui.components.SectionLabel
 import com.upxuu.xucms.ui.components.SettingRow
@@ -52,6 +54,7 @@ import com.upxuu.xucms.ui.theme.ThemeMode
 fun SettingsScreen(
   onBack: () -> Unit,
   onAbout: () -> Unit,
+  onToolbar: () -> Unit,
   onSignedOut: () -> Unit,
 ) {
   val container = LocalAppContainer.current
@@ -105,6 +108,13 @@ fun SettingsScreen(
       SectionLabel("编辑")
       FlatCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Column {
+          SettingRow(
+            icon = Icons.Outlined.Tune,
+            title = "工具栏",
+            subtitle = toolbarSummary(settings.toolbarLayout),
+            onClick = onToolbar,
+          )
+          ThinDivider(modifier = Modifier.padding(start = 52.dp))
           SettingRow(
             icon = Icons.Outlined.Timer,
             title = "自动保存草稿",
@@ -239,6 +249,11 @@ private fun themeLabel(mode: ThemeMode): String = when (mode) {
   ThemeMode.SYSTEM -> "跟随系统"
   ThemeMode.LIGHT -> "浅色"
   ThemeMode.DARK -> "深色"
+}
+
+private fun toolbarSummary(layout: ToolbarLayout): String {
+  val rows = if (layout.rows >= 2) "双行" else "单行"
+  return "$rows · 已启用 ${layout.enabled.size} 项"
 }
 
 @Composable

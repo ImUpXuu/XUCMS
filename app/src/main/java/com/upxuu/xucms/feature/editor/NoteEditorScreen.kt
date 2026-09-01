@@ -3,7 +3,6 @@ package com.upxuu.xucms.feature.editor
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -67,6 +66,7 @@ import com.upxuu.xucms.ui.components.ConfirmDeleteDialog
 import com.upxuu.xucms.ui.components.Pill
 import com.upxuu.xucms.ui.components.ThinDivider
 import com.upxuu.xucms.ui.rememberViewModel
+import com.upxuu.xucms.ui.theme.Motion
 
 /**
  * The writing screen: a title line, the block editor, and one toolbar. Metadata,
@@ -161,8 +161,8 @@ fun NoteEditorScreen(
         actions = {
           AnimatedVisibility(
             visible = state.dirty,
-            enter = fadeIn(tween(180)) + scaleIn(tween(180), initialScale = 0.8f),
-            exit = fadeOut(tween(140)) + scaleOut(tween(140), targetScale = 0.8f),
+            enter = fadeIn(Motion.enterTween()) + scaleIn(Motion.snappySpring(), initialScale = 0.8f),
+            exit = fadeOut(Motion.exitTween()) + scaleOut(Motion.exitTween(), targetScale = 0.8f),
           ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
               Pill(
@@ -196,9 +196,11 @@ fun NoteEditorScreen(
       )
     },
     bottomBar = {
+      val toolbarLayout by container.settings.toolbarLayoutFlow.collectAsState()
       Column(modifier = Modifier.imePadding()) {
         EditorToolbar(
           state = editor,
+          layout = toolbarLayout,
           onPickImage = { imagePicker.launch("image/*") },
           onOpenGallery = { showGallery = true },
           onEditLink = { showLink = true },
@@ -229,8 +231,8 @@ fun NoteEditorScreen(
 
       AnimatedVisibility(
         visible = state.restoredDraft,
-        enter = expandVertically(tween(220)) + fadeIn(tween(220)),
-        exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
+        enter = expandVertically(Motion.gentleSpring()) + fadeIn(Motion.enterTween()),
+        exit = shrinkVertically(Motion.exitTween()) + fadeOut(Motion.quickTween()),
       ) {
         Surface(color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)) {
           Row(

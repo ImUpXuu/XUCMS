@@ -85,7 +85,15 @@ Two properties are load-bearing and easy to regress: the gesture must wait for `
 
 ## Motion
 
-Restrained but present: 150–260ms, `FastOutSlowInEasing` or a light spring. Colour changes on selected controls animate (`animateColorAsState`), list changes use `Modifier.animateItem()`, and screens enter with a small slide plus scale while the outgoing screen only fades. Nothing bounces, spins, or draws attention to itself.
+All durations and curves live in `ui/theme/Motion.kt`; do not write a bare `tween(200)` at a call site. Springs are preferred for anything driven by a finger or a caret because they preserve velocity when a second gesture interrupts the first; tweens are for discrete flips like a colour swap or a panel appearing. Nothing bounces, spins, or draws attention to itself.
+
+The editor keeps the caret clear of the keyboard by measuring the cursor rectangle from `onTextLayout` plus `boundsInWindow`, then calling `animateScrollBy` with exactly the overlap. That is why `BlockField` takes an `onCaretRect` callback — the scroll amount has to come from real layout, not from a guess about line height.
+
+## Toolbar configuration
+
+`editor/ToolbarAction.kt` enumerates every control the toolbar can show; `ToolbarLayout` holds the user's ordered selection and a row count of 1 or 2, persisted in `SettingsStore` by stable string ids. `EditorToolbar` renders whatever the layout says and dispatches by action, so adding a control means adding an enum entry, an icon mapping and a `dispatch` branch — nothing in the editor screen changes.
+
+`feature/settings/ToolbarSettingsScreen` previews the toolbar using the same `ToolbarControl` composable the editor uses. That sharing is the point: the arrangement the user drags is literally the thing they will get, so the preview cannot drift from reality.
 
 ## Testing
 

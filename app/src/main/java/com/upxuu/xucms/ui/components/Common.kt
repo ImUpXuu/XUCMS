@@ -1,7 +1,6 @@
 package com.upxuu.xucms.ui.components
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -34,6 +33,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.upxuu.xucms.ui.theme.Motion
 
 /** Square tappable icon slot with a rounded highlight; used across the toolbar. */
 @Composable
@@ -154,7 +154,7 @@ fun EmptyState(
   modifier: Modifier = Modifier,
 ) {
   val entered = remember { Animatable(0f) }
-  LaunchedEffect(Unit) { entered.animateTo(1f, tween(320)) }
+  LaunchedEffect(Unit) { entered.animateTo(1f, Motion.gentleSpring()) }
 
   Column(
     modifier = modifier

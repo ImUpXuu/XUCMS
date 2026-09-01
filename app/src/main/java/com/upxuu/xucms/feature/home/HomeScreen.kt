@@ -2,7 +2,6 @@ package com.upxuu.xucms.feature.home
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -75,6 +74,7 @@ import com.upxuu.xucms.ui.components.QuickMetaSheet
 import com.upxuu.xucms.ui.components.SectionLabel
 import com.upxuu.xucms.ui.components.SwipeActionRow
 import com.upxuu.xucms.ui.rememberViewModel
+import com.upxuu.xucms.ui.theme.Motion
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -191,8 +191,8 @@ fun HomeScreen(
 
       AnimatedVisibility(
         visible = searching,
-        enter = expandVertically(tween(200)) + fadeIn(tween(200)),
-        exit = shrinkVertically(tween(180)) + fadeOut(tween(120)),
+        enter = expandVertically(Motion.gentleSpring()) + fadeIn(Motion.enterTween()),
+        exit = shrinkVertically(Motion.exitTween()) + fadeOut(Motion.quickTween()),
       ) {
         OutlinedTextField(
           value = state.query,
@@ -316,7 +316,7 @@ private fun KindTabs(selected: NoteKind, onSelect: (NoteKind) -> Unit) {
       val active = kind == selected
       val container by animateColorAsState(
         targetValue = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        animationSpec = tween(200),
+        animationSpec = Motion.normalTween(),
         label = "tab-container",
       )
       val contentColor by animateColorAsState(
@@ -325,7 +325,7 @@ private fun KindTabs(selected: NoteKind, onSelect: (NoteKind) -> Unit) {
         } else {
           MaterialTheme.colorScheme.onSurfaceVariant
         },
-        animationSpec = tween(200),
+        animationSpec = Motion.normalTween(),
         label = "tab-content",
       )
       Surface(

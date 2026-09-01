@@ -2,10 +2,12 @@ package com.upxuu.xucms.editor.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -34,20 +36,28 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -55,11 +65,16 @@ import coil.compose.AsyncImage
 import com.upxuu.xucms.editor.EditorState
 import com.upxuu.xucms.editor.model.Block
 import com.upxuu.xucms.editor.model.BlockType
+import com.upxuu.xucms.ui.theme.Motion
 
 /**
  * The editing surface: a lazy column of per-block text fields. Each block renders
  * with the same style it will have when published, and markers live in the gutter
  * rather than in the text.
+ *
+ * The caret is kept clear of the keyboard by measuring the cursor rectangle and
+ * scrolling by exactly the overlap, springing rather than jumping — so typing past
+ * the bottom of the screen advances one line smoothly instead of snapping.
  */
 @Composable
 fun MarkdownEditor(
@@ -70,13 +85,36 @@ fun MarkdownEditor(
   onImageClick: (Block) -> Unit = {},
 ) {
   val keyboard = LocalSoftwareKeyboardController.current
+  val density = LocalDensity.current
+
+  // Comfortable gap between the caret line and the toolbar/keyboard edge.
+  val bottomGap = with(density) { 28.dp.toPx() }
+  val topGap = with(density) { 12.dp.toPx() }
+
+  var viewport by remember { mutableStateOf<Rect?>(null) }
+  var caret by remember { mutableStateOf<Rect?>(null) }
+
+  LaunchedEffect(caret, viewport) {
+    val cursor = caret ?: return@LaunchedEffect
+    val bounds = viewport ?: return@LaunchedEffect
+    if (bounds.height <= 0f) return@LaunchedEffect
+
+    val below = cursor.bottom - (bounds.bottom - bottomGap)
+    val above = (bounds.top + topGap) - cursor.top
+    val delta = when {
+      below > 1f -> below
+      above > 1f -> -above
+      else -> 0f
+    }
+    if (delta != 0f) {
+      listState.animateScrollBy(delta, Motion.gentleSpring())
+    }
+  }
 
   LazyColumn(
-    modifier = modifier,
+    modifier = modifier.onGloballyPositioned { viewport = it.boundsInWindow() },
     state = listState,
-    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-      start = 18.dp, end = 18.dp, top = 8.dp, bottom = 96.dp,
-    ),
+    contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 120.dp),
     verticalArrangement = Arrangement.spacedBy(2.dp),
   ) {
     items(state.blocks, key = { it.id }) { block ->
@@ -87,6 +125,7 @@ fun MarkdownEditor(
           state.blocks.size == 1 && block.text.isEmpty() && block.type == BlockType.PARAGRAPH
         },
         onImageClick = onImageClick,
+        onCaretRect = { rect -> caret = rect },
       )
     }
     item(key = "tail-spacer") {
@@ -116,14 +155,16 @@ private fun BlockRow(
   block: Block,
   showPlaceholder: String?,
   onImageClick: (Block) -> Unit,
+  onCaretRect: (Rect) -> Unit,
 ) {
   when (block.type) {
     BlockType.DIVIDER -> DividerBlock(state, block)
     BlockType.IMAGE -> ImageBlock(state, block, onImageClick)
-    BlockType.CODE -> CodeBlock(state, block)
-    BlockType.QUOTE -> QuoteBlock(state, block, showPlaceholder)
-    BlockType.BULLET, BlockType.ORDERED, BlockType.TODO -> ListBlock(state, block, showPlaceholder)
-    else -> TextBlock(state, block, showPlaceholder)
+    BlockType.CODE -> CodeBlock(state, block, onCaretRect)
+    BlockType.QUOTE -> QuoteBlock(state, block, showPlaceholder, onCaretRect)
+    BlockType.BULLET, BlockType.ORDERED, BlockType.TODO ->
+      ListBlock(state, block, showPlaceholder, onCaretRect)
+    else -> TextBlock(state, block, showPlaceholder, onCaretRect)
   }
 }
 
@@ -131,6 +172,7 @@ private fun BlockRow(
 private fun BlockField(
   state: EditorState,
   block: Block,
+  onCaretRect: (Rect) -> Unit,
   modifier: Modifier = Modifier,
   showPlaceholder: String? = null,
   singleLineEnter: Boolean = true,
@@ -140,10 +182,24 @@ private fun BlockField(
   val transformation = rememberMarkTransformation(block.marks)
   val colors = MaterialTheme.colorScheme
 
+  var layout by remember(block.id) { mutableStateOf<TextLayoutResult?>(null) }
+  var fieldOrigin by remember(block.id) { mutableStateOf(Rect.Zero) }
+
   LaunchedEffect(state.focusRequestToken, state.focusedId) {
     if (state.focusedId == block.id) {
       runCatching { focusRequester.requestFocus() }
     }
+  }
+
+  // Report where the caret sits in window space whenever it, the text or the
+  // layout moves — that is what the scroller needs to keep it above the keyboard.
+  val caretOffset = block.value.selection.start
+  LaunchedEffect(state.focusedId, caretOffset, layout, fieldOrigin, block.text) {
+    if (state.focusedId != block.id) return@LaunchedEffect
+    val result = layout ?: return@LaunchedEffect
+    val safeOffset = caretOffset.coerceIn(0, result.layoutInput.text.length)
+    val cursor = runCatching { result.getCursorRect(safeOffset) }.getOrNull() ?: return@LaunchedEffect
+    onCaretRect(cursor.translate(fieldOrigin.left, fieldOrigin.top))
   }
 
   Box(modifier = modifier) {
@@ -157,8 +213,10 @@ private fun BlockField(
     BasicTextField(
       value = block.value,
       onValueChange = { state.onTextChange(block.id, it) },
+      onTextLayout = { layout = it },
       modifier = Modifier
         .fillMaxWidth()
+        .onGloballyPositioned { fieldOrigin = it.boundsInWindow() }
         .focusRequester(focusRequester)
         .onFocusChanged { if (it.isFocused) state.focus(block.id, caretAtEnd = false) }
         .onPreviewKeyEvent { event ->
@@ -192,8 +250,16 @@ private fun BlockField(
   }
 }
 
+private fun Rect.translate(dx: Float, dy: Float): Rect =
+  Rect(left + dx, top + dy, right + dx, bottom + dy)
+
 @Composable
-private fun TextBlock(state: EditorState, block: Block, showPlaceholder: String?) {
+private fun TextBlock(
+  state: EditorState,
+  block: Block,
+  showPlaceholder: String?,
+  onCaretRect: (Rect) -> Unit,
+) {
   val topPadding = when (block.type) {
     BlockType.H1 -> 20.dp
     BlockType.H2 -> 16.dp
@@ -201,7 +267,7 @@ private fun TextBlock(state: EditorState, block: Block, showPlaceholder: String?
     else -> 2.dp
   }
   Column(modifier = Modifier.fillMaxWidth().padding(top = topPadding, bottom = 2.dp)) {
-    BlockField(state, block, showPlaceholder = showPlaceholder)
+    BlockField(state, block, onCaretRect, showPlaceholder = showPlaceholder)
     if (block.type == BlockType.H2) {
       Spacer(Modifier.height(6.dp))
       HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), thickness = 2.dp)
@@ -210,7 +276,12 @@ private fun TextBlock(state: EditorState, block: Block, showPlaceholder: String?
 }
 
 @Composable
-private fun QuoteBlock(state: EditorState, block: Block, showPlaceholder: String?) {
+private fun QuoteBlock(
+  state: EditorState,
+  block: Block,
+  showPlaceholder: String?,
+  onCaretRect: (Rect) -> Unit,
+) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
@@ -228,6 +299,7 @@ private fun QuoteBlock(state: EditorState, block: Block, showPlaceholder: String
     BlockField(
       state = state,
       block = block,
+      onCaretRect = onCaretRect,
       modifier = Modifier.padding(start = 12.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
       showPlaceholder = showPlaceholder,
     )
@@ -235,7 +307,12 @@ private fun QuoteBlock(state: EditorState, block: Block, showPlaceholder: String
 }
 
 @Composable
-private fun ListBlock(state: EditorState, block: Block, showPlaceholder: String?) {
+private fun ListBlock(
+  state: EditorState,
+  block: Block,
+  showPlaceholder: String?,
+  onCaretRect: (Rect) -> Unit,
+) {
   val index = state.blocks.indexOfFirst { it.id == block.id }
   val ordinal = remember(state.revision, block.id, block.indent) {
     if (block.type != BlockType.ORDERED) 0 else {
@@ -286,6 +363,7 @@ private fun ListBlock(state: EditorState, block: Block, showPlaceholder: String?
     BlockField(
       state = state,
       block = block,
+      onCaretRect = onCaretRect,
       modifier = Modifier.padding(top = 3.dp),
       showPlaceholder = showPlaceholder,
     )
@@ -293,7 +371,7 @@ private fun ListBlock(state: EditorState, block: Block, showPlaceholder: String?
 }
 
 @Composable
-private fun CodeBlock(state: EditorState, block: Block) {
+private fun CodeBlock(state: EditorState, block: Block, onCaretRect: (Rect) -> Unit) {
   Surface(
     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
     shape = RoundedCornerShape(10.dp),
@@ -319,7 +397,7 @@ private fun CodeBlock(state: EditorState, block: Block) {
         }
       }
       Spacer(Modifier.height(6.dp))
-      BlockField(state, block, singleLineEnter = false)
+      BlockField(state, block, onCaretRect, singleLineEnter = false)
     }
   }
 }
