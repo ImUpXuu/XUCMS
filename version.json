@@ -1,13 +1,17 @@
 {
   "versionName": "2.1.0",
   "versionCode": 3,
-  "commit": "ed059d6a011db262ef111b832f47a34fdda0fc66",
-  "shortCommit": "ed059d6",
-  "builtAt": "2026-09-02 14:06:35",
-  "tag": "",
-  "apkUrl": "",
-  "releaseUrl": "https://github.com/ImUpXuu/XUCMS/releases/latest",
+  "commit": "f90b6c582e0904fcc1d7f6856bf3248ad1444eb0",
+  "shortCommit": "f90b6c5",
+  "builtAt": "2026-09-02 22:12:30",
+  "tag": "build-20260902-2212",
+  "apkUrl": "https://github.com/ImUpXuu/XUCMS/releases/download/build-20260902-2212/XUCMS-release.apk",
+  "releaseUrl": "https://github.com/ImUpXuu/XUCMS/releases/tag/build-20260902-2212",
   "changes": [
+    {
+      "summary": "feat(settings): in-app update check, and enforce version discipline",
+      "commit": "f90b6c5"
+    },
     {
       "summary": "fix(editor): correct caret scrolling on keyboard open; cut typing-path work",
       "commit": "ed059d6"
