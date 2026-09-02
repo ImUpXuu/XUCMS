@@ -74,6 +74,11 @@ class SettingsStore(context: Context) {
     rows = prefs.getInt(KEY_TOOLBAR_ROWS, 1),
   )
 
+  /** Which host serves version.json; the mirror is the default for reachability. */
+  var updateSource: UpdateSource
+    get() = UpdateSource.fromId(prefs.getString(KEY_UPDATE_SOURCE, null))
+    set(value) = prefs.edit().putString(KEY_UPDATE_SOURCE, value.id).apply()
+
   fun signOut() {
     credentials.edit().remove(KEY_TOKEN).apply()
     _signedIn.value = false
@@ -92,5 +97,6 @@ class SettingsStore(context: Context) {
     private const val KEY_DEFAULT_CATEGORY = "default_category"
     private const val KEY_TOOLBAR_ACTIONS = "toolbar_actions"
     private const val KEY_TOOLBAR_ROWS = "toolbar_rows"
+    private const val KEY_UPDATE_SOURCE = "update_source"
   }
 }

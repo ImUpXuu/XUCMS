@@ -16,8 +16,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
@@ -36,18 +38,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.upxuu.xucms.LocalAppContainer
+import com.upxuu.xucms.data.UpdateSource
+import com.upxuu.xucms.data.UpdateStatus
 import com.upxuu.xucms.editor.ToolbarLayout
 import com.upxuu.xucms.ui.components.FlatCard
 import com.upxuu.xucms.ui.components.SectionLabel
 import com.upxuu.xucms.ui.components.SettingRow
 import com.upxuu.xucms.ui.components.ThinDivider
 import com.upxuu.xucms.ui.theme.ThemeMode
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,17 +66,22 @@ fun SettingsScreen(
 ) {
   val container = LocalAppContainer.current
   val settings = container.settings
+  val scope = rememberCoroutineScope()
+  val uriHandler = LocalUriHandler.current
 
   var themeDialog by remember { mutableStateOf(false) }
   var autosaveDialog by remember { mutableStateOf(false) }
   var serverDialog by remember { mutableStateOf(false) }
   var categoryDialog by remember { mutableStateOf(false) }
   var signOutDialog by remember { mutableStateOf(false) }
+  var updateSourceDialog by remember { mutableStateOf(false) }
 
   var themeMode by remember { mutableStateOf(settings.themeMode) }
   var autosave by remember { mutableStateOf(settings.autosaveSeconds) }
   var baseUrl by remember { mutableStateOf(settings.baseUrl) }
   var defaultCategory by remember { mutableStateOf(settings.defaultCategory) }
+  var updateSource by remember { mutableStateOf(settings.updateSource) }
+  var updateStatus by remember { mutableStateOf<UpdateStatus>(UpdateStatus.Idle) }
 
   Scaffold(
     containerColor = MaterialTheme.colorScheme.background,
@@ -150,6 +162,39 @@ fun SettingsScreen(
         }
       }
 
+      SectionLabel("更新")
+      FlatCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Column {
+          SettingRow(
+            icon = Icons.Outlined.SystemUpdate,
+            title = "检查更新",
+            subtitle = when (val status = updateStatus) {
+              UpdateStatus.Checking -> "正在检查…"
+              is UpdateStatus.Available -> "有新版本 ${status.manifest.versionName}"
+              is UpdateStatus.UpToDate -> "已是最新（${container.updates.installedVersionName}）"
+              is UpdateStatus.Failed -> status.message
+              UpdateStatus.Idle -> "当前 ${container.updates.installedVersionName}"
+            },
+            onClick = {
+              // Ignore taps while a check is in flight rather than stacking requests.
+              if (updateStatus != UpdateStatus.Checking) {
+                scope.launch {
+                  updateStatus = UpdateStatus.Checking
+                  updateStatus = container.updates.check()
+                }
+              }
+            },
+          )
+          ThinDivider(modifier = Modifier.padding(start = 52.dp))
+          SettingRow(
+            icon = Icons.Outlined.Dns,
+            title = "更新源",
+            subtitle = updateSource.label,
+            onClick = { updateSourceDialog = true },
+          )
+        }
+      }
+
       SectionLabel("其他")
       FlatCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         SettingRow(
@@ -162,6 +207,44 @@ fun SettingsScreen(
 
       Spacer(Modifier.height(40.dp))
     }
+  }
+
+  // The check result is a dialog rather than a screen: it is read once and dismissed.
+  when (val status = updateStatus) {
+    is UpdateStatus.Available -> UpdateDialog(
+      manifest = status.manifest,
+      installedVersionName = container.updates.installedVersionName,
+      updateAvailable = true,
+      onDismiss = { updateStatus = UpdateStatus.Idle },
+      onDownload = {
+        val target = status.manifest.apkUrl.ifBlank { status.manifest.releaseUrl }
+        if (target.isNotBlank()) runCatching { uriHandler.openUri(target) }
+        updateStatus = UpdateStatus.Idle
+      },
+    )
+    is UpdateStatus.UpToDate -> UpdateDialog(
+      manifest = status.manifest,
+      installedVersionName = container.updates.installedVersionName,
+      updateAvailable = false,
+      onDismiss = { updateStatus = UpdateStatus.Idle },
+      onDownload = {},
+    )
+    else -> Unit
+  }
+
+  if (updateSourceDialog) {
+    ChoiceDialog(
+      title = "更新源",
+      options = UpdateSource.entries.map { it.label },
+      selectedIndex = UpdateSource.entries.indexOf(updateSource),
+      onDismiss = { updateSourceDialog = false },
+      onSelect = { index ->
+        val source = UpdateSource.entries[index]
+        settings.updateSource = source
+        updateSource = source
+        updateSourceDialog = false
+      },
+    )
   }
 
   if (themeDialog) {

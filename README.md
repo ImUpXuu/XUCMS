@@ -61,6 +61,14 @@ gradle wrapper --gradle-version 9.3.1   # 首次
 
 推送到 `main` 会触发 [`.github/workflows/release.yml`](.github/workflows/release.yml)：跑单元测试 → 构建 debug 与 release APK → 上传 artifact 并发一个 Release。
 
+## 版本与更新
+
+`app/build.gradle.kts` 里的 `versionCode` / `versionName` 是唯一版本来源，任何用户可见的改动都要在同一个提交里一起改——应用内的更新检查只比较 `versionCode`。
+
+构建成功后 CI 会执行 [`scripts/generate-version-json.sh`](scripts/generate-version-json.sh)，把版本号、commit、构建时间以及"自上次版本号变更以来的所有提交"写进根目录的 [`version.json`](version.json)，并提交回主分支。之所以放在分支上而不是 Release 附件里，是因为应用是通过 GitHub raw 镜像去读它的，而 Release 附件的地址没法走 raw 镜像。
+
+`设置 › 更新 › 检查更新` 会拉这个文件并展示更新日志。更新源默认用 `raw.gh.1s.fan` 加速，可以在同一处切换到官方 `raw.githubusercontent.com`；配置的源失败时会自动回退到另一个，避免镜像挂掉被误判成"已是最新"。
+
 ## 技术栈
 
 Kotlin · Jetpack Compose · Material 3 · Navigation Compose · OkHttp · kotlinx.serialization · Coil。没有 Room、没有 Hilt、没有富文本库——依赖表刻意保持得很短。

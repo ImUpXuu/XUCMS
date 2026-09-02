@@ -105,6 +105,20 @@ The typing path runs on every keystroke, so it is kept allocation-light on purpo
 
 `feature/settings/ToolbarSettingsScreen` previews the toolbar using the same `ToolbarControl` composable the editor uses. That sharing is the point: the arrangement the user drags is literally the thing they will get, so the preview cannot drift from reality.
 
+## Versioning and releases
+
+`versionCode` and `versionName` in `app/build.gradle.kts` are the single source of truth, and **both must be bumped in the same commit as any user-visible change**. Do not push a feature or a fix without touching them: the in-app update check compares `versionCode` only, so a build that ships changes under an unchanged code is invisible to everyone who already has the app.
+
+- `versionName` is semver — patch for a fix, minor for a feature, major for a rewrite.
+- `versionCode` is a monotonic integer, +1 per release. Never reuse or decrease it.
+- `scripts/generate-version-json.sh` greps those two lines with a literal pattern, so keep the `versionCode = 3` / `versionName = "2.1.0"` formatting intact.
+
+CI runs that script after a successful build and commits the resulting `version.json` back to the default branch. It has to live on the branch rather than as a release asset because the app fetches it through a **GitHub raw mirror**, and release asset URLs are not raw-mirrorable. Its `changes` array is every non-merge commit since the previous `versionCode` bump, which is why the workflow checks out with `fetch-depth: 0`.
+
+`UpdateSource` offers `raw.gh.1s.fan` (default, reachable from the mainland) and `raw.githubusercontent.com`. `UpdateChecker` retries the other host once when the configured one fails, so a mirror outage does not read as "no update available".
+
+Commit messages use conventional prefixes (`feat`, `fix`, `refactor`, `chore`, `perf`) with an imperative subject under about 70 characters, and a body that states the cause when fixing something rather than just the symptom. Those subjects are what users read in the changelog dialog, so write them for someone who does not know the codebase.
+
 ## Testing
 
 `app/src/test/` holds JVM unit tests for the editor codecs, `MarkSpans`, `EditorState`, and frontmatter mapping. Anything touching `Context` (DraftStore, SettingsStore) has no test — keep the pure logic separable so it stays testable.

@@ -1,0 +1,112 @@
+{
+  "versionName": "2.1.0",
+  "versionCode": 3,
+  "commit": "ed059d6a011db262ef111b832f47a34fdda0fc66",
+  "shortCommit": "ed059d6",
+  "builtAt": "2026-09-02 14:06:35",
+  "tag": "",
+  "apkUrl": "",
+  "releaseUrl": "https://github.com/ImUpXuu/XUCMS/releases/latest",
+  "changes": [
+    {
+      "summary": "fix(editor): correct caret scrolling on keyboard open; cut typing-path work",
+      "commit": "ed059d6"
+    },
+    {
+      "summary": "feat(editor): caret-follow scrolling, configurable toolbar, unified motion",
+      "commit": "2b3f129"
+    },
+    {
+      "summary": "fix(swipe): read the updated-state holders through .value",
+      "commit": "3e70557"
+    },
+    {
+      "summary": "fix(swipe): go back to SwipeToDismissBox so rows scroll and tap again",
+      "commit": "e40655d"
+    },
+    {
+      "summary": "fix: stop swipes eating list scroll, stop phantom local-change flags",
+      "commit": "949caa5"
+    },
+    {
+      "summary": "fix(backup): drop excludes that lint rejects outside an included path",
+      "commit": "2c3449e"
+    },
+    {
+      "summary": "fix(drafts): restructure legacy migration so it compiles",
+      "commit": "e104c81"
+    },
+    {
+      "summary": "fix(ux): swipes spring back, deletes confirm then undo, motion pass",
+      "commit": "2a8e3fa"
+    },
+    {
+      "summary": "fix(editor): one block per line, and rework the draft model",
+      "commit": "4313d48"
+    },
+    {
+      "summary": "fix(editor): size the quote gutter from the row instead of multiplying Dp",
+      "commit": "d45bf48"
+    },
+    {
+      "summary": "refactor!: rebuild XUCMS around a hand-written WYSIWYG markdown editor",
+      "commit": "26b2823"
+    },
+    {
+      "summary": "refactor: standardize image rendering to markdown",
+      "commit": "4809d75"
+    },
+    {
+      "summary": "feat(editor): use custom [IMG:url] tag for images",
+      "commit": "7e288b1"
+    },
+    {
+      "summary": "feat: standardize image markdown syntax",
+      "commit": "0d5dd45"
+    },
+    {
+      "summary": "ci: update release workflow and enhance UI components",
+      "commit": "129283f"
+    },
+    {
+      "summary": "Update README.md",
+      "commit": "2581121"
+    },
+    {
+      "summary": "build: add fallback for release keystore",
+      "commit": "615e6ba"
+    },
+    {
+      "summary": "ci: add step to decode debug keystore in release workflow",
+      "commit": "d2adb6f"
+    },
+    {
+      "summary": "feat: improve image upload and format handling",
+      "commit": "4864aff"
+    },
+    {
+      "summary": "feat: add splash screen and update CI workflows",
+      "commit": "9f98690"
+    },
+    {
+      "summary": "refactor: update frontmatter format and add about page",
+      "commit": "56ce9ba"
+    },
+    {
+      "summary": "chore: rebrand app to XUCMS and update CI workflows",
+      "commit": "d8c8fb9"
+    },
+    {
+      "summary": "refactor: update frontmatter parser and edit UI",
+      "commit": "08441cc"
+    },
+    {
+      "summary": "feat: add dynamic base URL and draft support",
+      "commit": "d9a893f"
+    },
+    {
+      "summary": "chore: rebrand app and improve theme support",
+      "commit": "919c7d8"
+    }
+  ]
+}

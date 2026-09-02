@@ -34,8 +34,10 @@ fun AboutScreen(onBack: () -> Unit) {
   val context = LocalContext.current
   val version = remember(context) {
     runCatching {
-      context.packageManager.getPackageInfo(context.packageName, 0).versionName
-    }.getOrNull() ?: "2.0"
+      val info = context.packageManager.getPackageInfo(context.packageName, 0)
+      @Suppress("DEPRECATION")
+      "${info.versionName} (${info.versionCode})"
+    }.getOrNull() ?: "2.1.0"
   }
 
   Scaffold(

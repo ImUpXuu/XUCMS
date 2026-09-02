@@ -12,8 +12,10 @@ android {
     applicationId = "com.upxuu.xucms"
     minSdk = 26
     targetSdk = 36
-    versionCode = 2
-    versionName = "2.0"
+    // Single source of truth for the app version. CI reads these two lines verbatim
+    // to generate version.json, so keep the literal `= n` / `= "x.y.z"` formatting.
+    versionCode = 3
+    versionName = "2.1.0"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
